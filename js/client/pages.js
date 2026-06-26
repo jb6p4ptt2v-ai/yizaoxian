@@ -38,7 +38,6 @@ window.ClientPages = {
                 });
             }
 
-            // 热卖商品置顶
             list.sort(function(a, b) {
                 if (a.is_hot && !b.is_hot) return -1;
                 if (!a.is_hot && b.is_hot) return 1;
@@ -55,7 +54,6 @@ window.ClientPages = {
             var cart = DataService.getCart();
             if (!cart) cart = {};
 
-            // 热卖榜单（如果有热卖商品）
             var hotHtml = '';
             if (self._hotProducts.length > 0) {
                 hotHtml = '<div class="hot-banner"><div class="hot-title">🔥 热卖榜单</div><div class="hot-list">';
@@ -222,18 +220,32 @@ window.ClientPages = {
         });
     },
 
+    // ★★★ 修复：拆分为 showCheckout（登录检查）和 _doCheckout（核心逻辑） ★★★
     showCheckout: function() {
+        var self = this;
+        // 检查登录状态
+        if (!Auth.getCurrentUser()) {
+            if (confirm('请先登录后再结算，是否现在登录？')) {
+                ClientApp.showLoginModal();
+                // 登录成功后，通过回调重新执行结算（但此时会重新进入 showCheckout，但用户已登录，所以不会再递归）
+                // 但是为了防止用户关闭登录框后直接点结算，我们可以设置一个回调
+                // 更好的做法是利用 ClientApp._returnCallback 机制
+                ClientApp._returnCallback = function() {
+                    self._doCheckout();
+                };
+            }
+            return;
+        }
+        // 已登录，直接结算
+        this._doCheckout();
+    },
+
+    _doCheckout: function() {
         var cart = DataService.getCart();
         if (!cart) cart = {};
         var ids = Object.keys(cart);
         if (!ids.length) {
             Utils.toast('购物车是空的');
-            return;
-        }
-
-        if (!ClientApp.requireAuth(function() {
-            ClientPages.showCheckout();
-        })) {
             return;
         }
 
@@ -358,7 +370,6 @@ window.ClientPages = {
                         total: total
                     };
 
-                    // 构建订单（含提货码、截单时间）
                     var builtOrder = OrderHelper.buildOrder(orderData);
 
                     DataService.saveOrder(builtOrder).then(function(orderResult) {
@@ -367,7 +378,17 @@ window.ClientPages = {
                         window.ClientPages.renderCart();
                         window.ClientPages.renderProducts();
 
-                        var orderId = orderResult.orderId || 'ORD' + Date.now().toString(36);
+                        // ★★★ 修复订单 ID 获取 ★★★
+                        var orderId = orderResult.orderId;
+                        if (!orderId && orderResult.orders && orderResult.orders.length > 0) {
+                            var savedOrders = orderResult.orders;
+                            var lastOrder = savedOrders[savedOrders.length - 1];
+                            orderId = lastOrder.id;
+                        }
+                        if (!orderId) {
+                            orderId = 'ORD' + Date.now().toString(36);
+                        }
+
                         PaymentHelper.pay({
                             orderId: orderId,
                             total: total,
