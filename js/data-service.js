@@ -1,7 +1,3 @@
-/**
- * 数据服务层 - 调用 Cloudflare Workers API
- * 数据存储在 D1 数据库
- */
 window.DataService = {
     _getApiBase: function() {
         return (window.CONFIG && window.CONFIG.API_BASE) || 'https://yizaoxian-api.xiaofanzhouapple.workers.dev';
@@ -172,7 +168,6 @@ window.DataService = {
         return this._request('/admin/change-password', 'POST', { id: id, oldPassword: oldPassword, newPassword: newPassword });
     },
 
-    // ★★★ 支付确认（银联预留） ★★★
     paymentConfirm: function(orderId, transactionId, paymentData) {
         return this._request('/payment/confirm', 'POST', {
             orderId: orderId,

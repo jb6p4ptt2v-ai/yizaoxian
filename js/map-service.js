@@ -1,5 +1,5 @@
 /**
- * 高德地图服务 - 定位和地理编码（无地图容器）
+ * 高德地图服务 - 仅定位和地理编码，移除地图选点
  */
 window.MapService = (function() {
     'use strict';
@@ -37,7 +37,7 @@ window.MapService = (function() {
                         extensions: 'all'
                     });
                     _isInitialized = true;
-                    console.log('✅ 高德地图服务已初始化');
+                    console.log('✅ 高德地图服务已初始化（定位+地理编码）');
                     if (callback) callback(true);
                     _initCallbacks.forEach(function(fn) { if (typeof fn === 'function') fn(); });
                     _initCallbacks = [];
@@ -69,9 +69,7 @@ window.MapService = (function() {
         _loadMap: _loadMap,
         locateCurrentPosition: locateCurrentPosition,
         searchNearby: searchNearby,
-        geocodeAddress: geocodeAddress,
-        openMapPicker: openMapPicker,
-        _confirmPick: _confirmPick
+        geocodeAddress: geocodeAddress
     };
 
     Object.defineProperty(publicAPI, '_isInitialized', {
@@ -186,7 +184,6 @@ window.MapService = (function() {
         );
     }
 
-    // ★★★ 搜索附近POI ★★★
     function searchNearby(lng, lat, keyword, callback) {
         _loadMap(function() {
             if (typeof AMap === 'undefined' || !AMap.PlaceSearch) {
@@ -204,9 +201,8 @@ window.MapService = (function() {
             });
 
             var searchKeyword = keyword && keyword.trim() ? keyword.trim() : '';
-            var radius = 3000; // 搜索半径3000米
+            var radius = 3000;
 
-            // 使用 searchNearBy 搜索周边POI
             placeSearch.searchNearBy(searchKeyword, [lng, lat], radius, function(status, result) {
                 if (status === 'complete' && result.poiList) {
                     var pois = result.poiList.pois || [];
@@ -222,7 +218,6 @@ window.MapService = (function() {
                         };
                     }));
                 } else {
-                    // 如果搜索失败，尝试无关键词搜索
                     if (searchKeyword) {
                         placeSearch.searchNearBy('', [lng, lat], radius, function(status2, result2) {
                             if (status2 === 'complete' && result2.poiList) {
@@ -274,13 +269,6 @@ window.MapService = (function() {
         });
     }
 
-    function openMapPicker(callback, currentAddress, lng, lat) {
-        console.warn('地图选点功能需要地图容器，当前未实现');
-        if (callback) callback(null);
-    }
-
-    function _confirmPick() {}
-
     return publicAPI;
 })();
-console.log('✅ 地图服务已加载');
+console.log('✅ 地图服务已加载（地图选点已移除）');

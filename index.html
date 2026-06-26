@@ -43,9 +43,7 @@
     </script>
 </head>
 <body>
-    <!-- ========== 认证页面 ========== -->
     <div id="authApp" style="display:none;">
-        <!-- 登录 -->
         <div id="auth-login" class="auth-page active">
             <div class="auth-box">
                 <div class="auth-title">🥬 宜早鲜</div>
@@ -58,7 +56,6 @@
                 <div class="auth-link"><a href="#" onclick="Auth.showPage('forgot')">忘记密码？</a></div>
             </div>
         </div>
-        <!-- 注册 -->
         <div id="auth-register" class="auth-page">
             <div class="auth-box">
                 <div class="auth-title">🥬 注册</div>
@@ -81,7 +78,6 @@
                 <div class="auth-link">已有账号？ <a href="#" onclick="Auth.showPage('login')">去登录</a></div>
             </div>
         </div>
-        <!-- 找回密码 -->
         <div id="auth-forgot" class="auth-page">
             <div class="auth-box">
                 <div class="auth-title">🔑 找回密码</div>
@@ -103,7 +99,6 @@
         </div>
     </div>
 
-    <!-- ========== 客户端主界面（游客可见） ========== -->
     <div id="clientApp" style="display:block;">
         <header class="app-header">
             <div class="logo"><span>🥬</span> 宜早鲜</div>
@@ -117,7 +112,6 @@
             </div>
         </header>
         <div class="container">
-            <!-- 首页 -->
             <div id="page-home" class="page active">
                 <div class="search-bar">
                     <input type="text" id="searchInput" placeholder="搜索农家菜..." oninput="ClientPages.filterProducts()">
@@ -134,7 +128,6 @@
                 </div>
                 <div id="productGrid" class="product-grid"></div>
             </div>
-            <!-- 购物车 -->
             <div id="page-cart" class="page">
                 <h3 style="margin:8px 0 12px;">🛒 我的购物车</h3>
                 <div id="cartList"></div>
@@ -144,19 +137,17 @@
                     <button class="checkout-btn" onclick="ClientPages.showCheckout()">去结算</button>
                 </div>
             </div>
-            <!-- 订单 -->
             <div id="page-orders" class="page">
                 <h3 style="margin:8px 0 12px;">📦 我的订单</h3>
                 <div class="order-tabs">
                     <button class="order-tab active" data-status="全部" onclick="ClientPages.filterOrders('全部')">全部</button>
-                    <button class="order-tab" data-status="pending" onclick="ClientPages.filterOrders('pending')">待发货</button>
+                    <button class="order-tab" data-status="pending" onclick="ClientPages.filterOrders('pending')">待提货</button>
                     <button class="order-tab" data-status="shipped" onclick="ClientPages.filterOrders('shipped')">配送中</button>
                     <button class="order-tab" data-status="completed" onclick="ClientPages.filterOrders('completed')">已完成</button>
                 </div>
                 <div id="orderList"></div>
                 <div id="orderEmpty" class="cart-empty"><div class="empty-icon">📭</div><p>暂无订单</p></div>
             </div>
-            <!-- 个人中心 -->
             <div id="page-profile" class="page">
                 <div class="profile-card">
                     <div class="avatar">🧑‍🌾</div>
@@ -180,7 +171,6 @@
                 </div>
             </div>
         </div>
-        <!-- 底部导航 -->
         <nav class="bottom-nav">
             <button class="nav-item active" data-page="home" onclick="ClientApp.navigateTo('home')"><span class="nav-icon">🏠</span><span>首页</span></button>
             <button class="nav-item" data-page="cart" onclick="ClientApp.navigateTo('cart')"><span class="nav-icon">🛒</span><span>购物车</span><span class="nav-badge" id="navCartBadge" style="display:none;">0</span></button>
@@ -189,11 +179,9 @@
         </nav>
     </div>
 
-    <!-- ========== 全局弹窗 ========== -->
     <div class="modal-overlay" id="modalOverlay"><div class="modal-box" id="modalContent"></div></div>
     <div id="backupToast" class="backup-toast"></div>
 
-    <!-- ========== JS 模块 ========== -->
     <script src="js/config.js"></script>
     <script src="js/utils.js"></script>
     <script src="js/data-service.js"></script>
@@ -205,6 +193,7 @@
     <script src="js/client/pages.js"></script>
     <script src="js/location-helper.js"></script>
     <script src="js/payment-helper.js"></script>
+    <script src="js/order-helper.js"></script>
     <script src="js/init.js"></script>
 
     <script>

@@ -331,6 +331,63 @@ textarea {
     border-color: var(--primary);
 }
 
+/* ===== 热卖榜单 ===== */
+.hot-banner {
+    background: linear-gradient(135deg, #fff5e6, #ffe8d6);
+    border-radius: 12px;
+    padding: 12px 16px;
+    margin-bottom: 12px;
+    border: 1px solid #ffe0c0;
+}
+.hot-title {
+    font-size: 15px;
+    font-weight: 700;
+    color: #e67e22;
+    margin-bottom: 8px;
+}
+.hot-list {
+    display: flex;
+    gap: 8px;
+    overflow-x: auto;
+    padding-bottom: 4px;
+    scrollbar-width: none;
+}
+.hot-list::-webkit-scrollbar {
+    display: none;
+}
+.hot-item {
+    flex-shrink: 0;
+    background: #fff;
+    border-radius: 8px;
+    padding: 6px 12px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.06);
+    cursor: pointer;
+    transition: transform 0.15s;
+}
+.hot-item:active {
+    transform: scale(0.95);
+}
+.hot-item .hot-emoji {
+    font-size: 20px;
+}
+.hot-item .hot-name {
+    font-size: 13px;
+    font-weight: 500;
+    color: #333;
+    white-space: nowrap;
+    max-width: 80px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.hot-item .hot-price {
+    font-size: 13px;
+    font-weight: 600;
+    color: #ff3b30;
+}
+
 /* ===== 商品列表（多多买菜风格） ===== */
 .product-grid {
     display: grid;
@@ -346,6 +403,7 @@ textarea {
     transition: transform 0.2s;
     display: flex;
     flex-direction: column;
+    cursor: pointer;
 }
 .product-card:active {
     transform: scale(0.97);
@@ -360,6 +418,13 @@ textarea {
     font-size: 52px;
     color: var(--primary);
     font-weight: 300;
+    position: relative;
+}
+.product-card .product-img .hot-tag {
+    position: absolute;
+    top: 6px;
+    right: 6px;
+    font-size: 16px;
 }
 .product-card .product-info {
     padding: 8px 10px 10px;
@@ -377,6 +442,16 @@ textarea {
     line-height: 1.4;
     min-height: 38px;
     color: #1a1a1a;
+}
+.product-card .product-name .today-pickup-tag {
+    font-size: 10px;
+    font-weight: 500;
+    color: var(--primary);
+    background: var(--primary-light);
+    padding: 1px 6px;
+    border-radius: 4px;
+    margin-left: 4px;
+    white-space: nowrap;
 }
 .product-card .product-unit {
     font-size: 11px;
@@ -1070,7 +1145,7 @@ textarea {
 }
 
 /* ================================================================
-   ★★★ 地址列表卡片 + 左滑交互（拼多多风格） ★★★
+   ★★★ 地址列表卡片 + 左滑交互 ★★★
    ================================================================ */
 .address-item-wrapper {
     position: relative;
@@ -1202,7 +1277,7 @@ textarea {
     transform: scale(0.98);
 }
 
-/* ===== 地址表单（全屏） ===== */
+/* ===== 地址表单 ===== */
 .address-form-container {
     padding: 16px 20px 100px;
 }
@@ -1319,6 +1394,53 @@ textarea {
     pointer-events: none;
 }
 
+/* ===== 截单时间提示 ===== */
+.cutoff-notice {
+    font-size: 12px;
+    color: var(--text-secondary);
+    text-align: center;
+    padding: 6px 0;
+    background: #fff8e1;
+    border-radius: 6px;
+    margin-bottom: 8px;
+}
+.cutoff-notice strong {
+    color: #e67e22;
+}
+
+/* ===== 商品详情弹窗 ===== */
+.product-detail-emoji {
+    text-align: center;
+    font-size: 56px;
+    padding: 8px 0;
+}
+.product-detail-row {
+    display: flex;
+    justify-content: space-between;
+    padding: 6px 0;
+    border-bottom: 1px solid #f5f5f5;
+}
+.product-detail-row .label {
+    color: var(--text-secondary);
+}
+.product-detail-row .value {
+    font-weight: 500;
+}
+.product-detail-row .value.price {
+    color: #ff3b30;
+    font-weight: 700;
+}
+.product-detail-desc {
+    padding: 8px 0;
+    color: var(--text-secondary);
+    font-size: 13px;
+}
+.product-detail-in-cart {
+    padding: 6px 0;
+    color: var(--primary);
+    font-weight: 500;
+}
+
 /* ===== 响应式 ===== */
 @media (min-width: 640px) {
     .container {
@@ -1348,6 +1470,9 @@ textarea {
     }
     .app-header .logo {
         font-size: 17px;
+    }
+    .hot-item .hot-name {
+        max-width: 60px;
     }
 }
 ::-webkit-scrollbar {

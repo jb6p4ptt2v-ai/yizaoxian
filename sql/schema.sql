@@ -1,9 +1,7 @@
 -- ============================================================
--- 宜早鲜 D1 数据库表结构
--- 在 Cloudflare D1 中执行此 SQL
+-- 宜早鲜 D1 数据库表结构（v3.1）
 -- ============================================================
 
--- 1. 用户表
 CREATE TABLE IF NOT EXISTS users (
     id TEXT PRIMARY KEY,
     phone TEXT UNIQUE NOT NULL,
@@ -14,7 +12,6 @@ CREATE TABLE IF NOT EXISTS users (
     created_at TEXT NOT NULL
 );
 
--- 2. 用户地址表
 CREATE TABLE IF NOT EXISTS addresses (
     id TEXT PRIMARY KEY,
     user_id TEXT NOT NULL,
@@ -29,11 +26,11 @@ CREATE TABLE IF NOT EXISTS addresses (
     district TEXT DEFAULT '',
     street TEXT DEFAULT '',
     is_default INTEGER DEFAULT 0,
+    last_used INTEGER DEFAULT 0,
     created_at TEXT NOT NULL,
     FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
 );
 
--- 3. 供应商表（已添加省市区字段）
 CREATE TABLE IF NOT EXISTS suppliers (
     id TEXT PRIMARY KEY,
     name TEXT NOT NULL,
@@ -48,7 +45,6 @@ CREATE TABLE IF NOT EXISTS suppliers (
     created_at TEXT NOT NULL
 );
 
--- 4. 商品表
 CREATE TABLE IF NOT EXISTS products (
     id TEXT PRIMARY KEY,
     name TEXT NOT NULL,
@@ -60,12 +56,13 @@ CREATE TABLE IF NOT EXISTS products (
     emoji TEXT DEFAULT '🥬',
     description TEXT DEFAULT '',
     status TEXT DEFAULT 'on',
+    is_hot INTEGER DEFAULT 0,          -- 热卖标记
+    today_pickup INTEGER DEFAULT 1,    -- 今日可提标记
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL,
     FOREIGN KEY (supplier_id) REFERENCES suppliers(id) ON DELETE SET NULL
 );
 
--- 5. 订单表
 CREATE TABLE IF NOT EXISTS orders (
     id TEXT PRIMARY KEY,
     customer_name TEXT NOT NULL,
@@ -73,13 +70,15 @@ CREATE TABLE IF NOT EXISTS orders (
     address TEXT NOT NULL,
     address_id TEXT,
     total REAL NOT NULL,
-    status TEXT DEFAULT 'pending',
+    status TEXT DEFAULT 'pending',     -- pending, shipped, completed, cancelled, ready_pickup, picked
     items TEXT NOT NULL,
+    pickup_code TEXT DEFAULT '',       -- 提货码
+    cutoff_time TEXT,                  -- 截单时间（23:00）
+    expected_pickup_date TEXT,         -- 预计提货日期
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL
 );
 
--- 6. 库存操作记录表
 CREATE TABLE IF NOT EXISTS inventory_logs (
     id TEXT PRIMARY KEY,
     product_id TEXT NOT NULL,
@@ -91,7 +90,6 @@ CREATE TABLE IF NOT EXISTS inventory_logs (
     FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE CASCADE
 );
 
--- 7. 财务记录表
 CREATE TABLE IF NOT EXISTS finance_records (
     id TEXT PRIMARY KEY,
     type TEXT NOT NULL,
@@ -101,7 +99,6 @@ CREATE TABLE IF NOT EXISTS finance_records (
     created_at TEXT NOT NULL
 );
 
--- 8. 管理员表
 CREATE TABLE IF NOT EXISTS admins (
     id TEXT PRIMARY KEY,
     username TEXT UNIQUE NOT NULL,
@@ -110,26 +107,9 @@ CREATE TABLE IF NOT EXISTS admins (
     created_at TEXT NOT NULL
 );
 
--- ============================================================
--- 创建索引
--- ============================================================
 CREATE INDEX IF NOT EXISTS idx_users_phone ON users(phone);
 CREATE INDEX IF NOT EXISTS idx_addresses_user_id ON addresses(user_id);
 CREATE INDEX IF NOT EXISTS idx_products_supplier_id ON products(supplier_id);
 CREATE INDEX IF NOT EXISTS idx_orders_status ON orders(status);
 CREATE INDEX IF NOT EXISTS idx_inventory_logs_product_id ON inventory_logs(product_id);
 CREATE INDEX IF NOT EXISTS idx_finance_records_type ON finance_records(type);
-
--- ============================================================
--- 初始化默认管理员账号（密码: 123456）
--- ============================================================
-INSERT OR IGNORE INTO users (id, phone, password, security_question, security_answer, role, created_at)
-VALUES (
-    'u_admin_001',
-    '13800138000',
-    '123456',
-    '您的出生地是？',
-    '北京',
-    'admin',
-    datetime('now')
-);
