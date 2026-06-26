@@ -1,3 +1,8 @@
+/* ============================================================
+   宜早鲜 - 完整样式表 v4.0
+   包含：全局、认证、商品、购物车、订单、评价、收藏、优惠券、消息、售后、地址管理、后台管理
+   ============================================================ */
+
 /* ===== 全局重置 & 主题 ===== */
 * {
     margin: 0;
@@ -179,14 +184,14 @@ textarea {
 }
 .app-header .header-actions {
     display: flex;
-    gap: 12px;
+    gap: 8px;
     align-items: center;
 }
 .app-header .header-actions button {
     background: rgba(255, 255, 255, 0.18);
     color: #fff;
     border-radius: 20px;
-    padding: 4px 14px;
+    padding: 4px 12px;
     font-size: 13px;
     backdrop-filter: blur(4px);
 }
@@ -207,6 +212,7 @@ textarea {
     align-items: center;
     justify-content: center;
     font-weight: 600;
+    min-width: 18px;
 }
 
 /* ===== 底部导航 ===== */
@@ -302,6 +308,21 @@ textarea {
     white-space: nowrap;
 }
 
+/* ===== 热搜词 ===== */
+.hot-word {
+    font-size: 12px;
+    color: var(--text-secondary);
+    background: #f0f0f0;
+    padding: 2px 12px;
+    border-radius: 14px;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+.hot-word:hover {
+    background: var(--primary-light);
+    color: var(--primary);
+}
+
 /* ===== 分类标签 ===== */
 .category-tabs {
     display: flex;
@@ -388,7 +409,7 @@ textarea {
     color: #ff3b30;
 }
 
-/* ===== 商品列表（多多买菜风格） ===== */
+/* ===== 商品列表 ===== */
 .product-grid {
     display: grid;
     grid-template-columns: repeat(2, 1fr);
@@ -457,6 +478,10 @@ textarea {
     font-size: 11px;
     color: #999;
     margin-top: 2px;
+}
+.product-card .product-unit .sold-tag {
+    color: #999;
+    margin-left: 6px;
 }
 .product-card .product-meta {
     display: flex;
@@ -606,6 +631,10 @@ textarea {
     font-weight: 600;
     font-size: 16px;
 }
+.cart-total .checkout-btn:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+}
 
 /* ===== 订单 ===== */
 .order-tabs {
@@ -637,6 +666,7 @@ textarea {
     padding: 14px;
     margin-bottom: 10px;
     box-shadow: var(--shadow);
+    cursor: pointer;
 }
 .order-card .order-header {
     display: flex;
@@ -684,6 +714,21 @@ textarea {
     margin-top: 4px;
     padding-top: 4px;
     border-top: 1px dashed var(--border);
+}
+
+/* ===== 评价标签 ===== */
+.review-tag {
+    padding: 4px 12px;
+    border: 1px solid #ddd;
+    border-radius: 14px;
+    font-size: 12px;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+.review-tag.active {
+    border-color: var(--primary);
+    background: var(--primary-light);
+    color: var(--primary);
 }
 
 /* ===== 个人中心 ===== */
@@ -927,14 +972,8 @@ textarea {
     animation: slideUp 0.3s ease;
 }
 @keyframes slideUp {
-    from {
-        transform: translateY(40px);
-        opacity: 0;
-    }
-    to {
-        transform: translateY(0);
-        opacity: 1;
-    }
+    from { transform: translateY(40px); opacity: 0; }
+    to { transform: translateY(0); opacity: 1; }
 }
 .modal-box .modal-title {
     font-size: 18px;
@@ -1018,7 +1057,7 @@ textarea {
 }
 .dashboard-grid {
     display: grid;
-    grid-template-columns: repeat(2, 1fr);
+    grid-template-columns: repeat(4, 1fr);
     gap: 10px;
     margin-bottom: 14px;
 }
@@ -1030,12 +1069,12 @@ textarea {
     box-shadow: var(--shadow);
 }
 .dashboard-grid .dash-item .dash-num {
-    font-size: 26px;
+    font-size: 22px;
     font-weight: 700;
     color: var(--primary);
 }
 .dashboard-grid .dash-item .dash-label {
-    font-size: 12px;
+    font-size: 11px;
     color: var(--text-secondary);
     margin-top: 2px;
 }
@@ -1093,7 +1132,7 @@ textarea {
 }
 
 /* ================================================================
-   ★★★ 地址管理全屏页面（拼多多风格） ★★★
+   ★★★ 地址管理全屏页面 ★★★
    ================================================================ */
 .address-page-container {
     position: fixed;
@@ -1144,9 +1183,6 @@ textarea {
     margin-bottom: 16px;
 }
 
-/* ================================================================
-   ★★★ 地址列表卡片 + 左滑交互 ★★★
-   ================================================================ */
 .address-item-wrapper {
     position: relative;
     overflow: hidden;
@@ -1186,12 +1222,8 @@ textarea {
     align-items: center;
     min-height: 60px;
 }
-.swipe-btn-set-default {
-    background: #00b04a;
-}
-.swipe-btn-delete {
-    background: #ff3b30;
-}
+.swipe-btn-set-default { background: #00b04a; }
+.swipe-btn-delete { background: #ff3b30; }
 .address-item-wrapper.swipe-open .address-item {
     transform: translateX(-150px);
 }
@@ -1250,15 +1282,9 @@ textarea {
     border: none;
     cursor: pointer;
 }
-.address-item-actions .addr-btn-set-default {
-    color: var(--primary);
-}
-.address-item-actions .addr-btn-edit {
-    color: #333;
-}
-.address-item-actions .addr-btn-delete {
-    color: #ff3b30;
-}
+.address-item-actions .addr-btn-set-default { color: var(--primary); }
+.address-item-actions .addr-btn-edit { color: #333; }
+.address-item-actions .addr-btn-delete { color: #ff3b30; }
 .address-add-btn-container {
     padding: 16px 0 30px;
 }
@@ -1277,7 +1303,6 @@ textarea {
     transform: scale(0.98);
 }
 
-/* ===== 地址表单 ===== */
 .address-form-container {
     padding: 16px 20px 100px;
 }
@@ -1333,8 +1358,6 @@ textarea {
     position: sticky;
     bottom: 16px;
 }
-
-/* ===== 标签选择器 ===== */
 .tag-selector {
     display: flex;
     gap: 8px;
@@ -1357,8 +1380,6 @@ textarea {
 .tag-option:active {
     transform: scale(0.95);
 }
-
-/* ===== 省市区联动 ===== */
 .address-form #region_province,
 .address-form #region_city,
 .address-form #region_district {
@@ -1452,6 +1473,9 @@ textarea {
     .admin-nav {
         justify-content: center;
     }
+    .dashboard-grid {
+        grid-template-columns: repeat(4, 1fr);
+    }
 }
 @media (max-width: 400px) {
     .product-grid {
@@ -1473,6 +1497,9 @@ textarea {
     }
     .hot-item .hot-name {
         max-width: 60px;
+    }
+    .dashboard-grid {
+        grid-template-columns: repeat(2, 1fr);
     }
 }
 ::-webkit-scrollbar {

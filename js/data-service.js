@@ -1,3 +1,7 @@
+/**
+ * 数据服务层 - 调用 Cloudflare Workers API
+ * 完整版 v4.0 - 含所有新功能接口
+ */
 window.DataService = {
     _getApiBase: function() {
         return (window.CONFIG && window.CONFIG.API_BASE) || 'https://yizaoxian-api.xiaofanzhouapple.workers.dev';
@@ -27,6 +31,9 @@ window.DataService = {
             });
     },
 
+    // ================================================================
+    // 用户模块
+    // ================================================================
     login: function(phone, password) {
         return this._request('/users/login', 'POST', { phone: phone, password: password });
     },
@@ -68,6 +75,9 @@ window.DataService = {
         return this._request('/users', 'GET');
     },
 
+    // ================================================================
+    // 地址模块
+    // ================================================================
     getAddresses: function(userId) {
         return this._request('/users/addresses?userId=' + userId, 'GET');
     },
@@ -80,6 +90,9 @@ window.DataService = {
         return this._request('/users/addresses?id=' + id + '&userId=' + userId, 'DELETE');
     },
 
+    // ================================================================
+    // 供应商模块
+    // ================================================================
     getSuppliers: function() {
         return this._request('/suppliers', 'GET');
     },
@@ -92,6 +105,9 @@ window.DataService = {
         return this._request('/suppliers?id=' + id, 'DELETE');
     },
 
+    // ================================================================
+    // 商品模块（含已售、产地、评价统计）
+    // ================================================================
     getProducts: function() {
         return this._request('/products', 'GET');
     },
@@ -104,8 +120,67 @@ window.DataService = {
         return this._request('/products?id=' + id, 'DELETE');
     },
 
+    // ================================================================
+    // 商品规格
+    // ================================================================
+    getProductSpecs: function(productId) {
+        return this._request('/products/specs?productId=' + productId, 'GET');
+    },
+
+    saveProductSpec: function(productId, specData) {
+        return this._request('/products/specs', 'POST', { productId: productId, ...specData });
+    },
+
+    deleteProductSpec: function(id) {
+        return this._request('/products/specs?id=' + id, 'DELETE');
+    },
+
+    // ================================================================
+    // 搜索模块
+    // ================================================================
+    search: function(keyword, sort, category, page, limit) {
+        var params = [];
+        if (keyword) params.push('keyword=' + encodeURIComponent(keyword));
+        if (sort) params.push('sort=' + sort);
+        if (category) params.push('category=' + encodeURIComponent(category));
+        if (page) params.push('page=' + page);
+        if (limit) params.push('limit=' + limit);
+        var query = params.length ? '?' + params.join('&') : '';
+        return this._request('/search' + query, 'GET');
+    },
+
+    saveSearchHistory: function(userId, keyword) {
+        return this._request('/search/history', 'POST', { userId: userId, keyword: keyword });
+    },
+
+    getSearchHistory: function(userId) {
+        return this._request('/search/history?userId=' + userId, 'GET');
+    },
+
+    getHotWords: function() {
+        return this._request('/search/hot', 'GET');
+    },
+
+    // ================================================================
+    // 收藏模块
+    // ================================================================
+    getFavorites: function(userId) {
+        return this._request('/favorites?userId=' + userId, 'GET');
+    },
+
+    toggleFavorite: function(userId, productId) {
+        return this._request('/favorites', 'POST', { userId: userId, productId: productId });
+    },
+
+    // ================================================================
+    // 订单模块
+    // ================================================================
     getOrders: function() {
         return this._request('/orders', 'GET');
+    },
+
+    getOrderDetail: function(orderId) {
+        return this._request('/orders/detail?id=' + orderId, 'GET');
     },
 
     saveOrder: function(orderData) {
@@ -116,6 +191,105 @@ window.DataService = {
         return this._request('/orders/status', 'PUT', { orderId: orderId, status: status });
     },
 
+    reorder: function(orderId, userId) {
+        return this._request('/orders/reorder', 'POST', { orderId: orderId, userId: userId });
+    },
+
+    updateLogistics: function(orderId, trackingNumber, carrier, logisticsInfo) {
+        return this._request('/orders/logistics', 'PUT', {
+            orderId: orderId,
+            trackingNumber: trackingNumber,
+            carrier: carrier,
+            logisticsInfo: logisticsInfo
+        });
+    },
+
+    // ================================================================
+    // 评价模块
+    // ================================================================
+    submitReview: function(orderId, productId, userId, rating, content, images, tags) {
+        return this._request('/reviews', 'POST', {
+            orderId: orderId,
+            productId: productId,
+            userId: userId,
+            rating: rating,
+            content: content || '',
+            images: images || '[]',
+            tags: tags || '[]'
+        });
+    },
+
+    getProductReviews: function(productId, sort, ratingFilter, page, limit) {
+        var params = '?productId=' + productId;
+        if (sort) params += '&sort=' + sort;
+        if (ratingFilter) params += '&rating=' + ratingFilter;
+        if (page) params += '&page=' + page;
+        if (limit) params += '&limit=' + limit;
+        return this._request('/reviews/product' + params, 'GET');
+    },
+
+    replyReview: function(reviewId, reply) {
+        return this._request('/reviews/reply', 'POST', { reviewId: reviewId, reply: reply });
+    },
+
+    likeReview: function(reviewId, userId) {
+        return this._request('/reviews/like', 'POST', { reviewId: reviewId, userId: userId });
+    },
+
+    // ================================================================
+    // 优惠券模块
+    // ================================================================
+    getCoupons: function(userId) {
+        return this._request('/coupons?userId=' + (userId || ''), 'GET');
+    },
+
+    claimCoupon: function(userId, couponId) {
+        return this._request('/coupons/claim', 'POST', { userId: userId, couponId: couponId });
+    },
+
+    // ================================================================
+    // 消息模块
+    // ================================================================
+    getMessages: function(userId) {
+        return this._request('/messages?userId=' + userId, 'GET');
+    },
+
+    markMessageRead: function(messageId, userId) {
+        return this._request('/messages/read', 'POST', { messageId: messageId, userId: userId });
+    },
+
+    sendMessage: function(userId, type, title, content, link) {
+        return this._request('/messages/send', 'POST', { userId: userId, type: type, title: title, content: content, link: link || '' });
+    },
+
+    // ================================================================
+    // 售后模块
+    // ================================================================
+    submitAfterSale: function(orderId, userId, type, reason, description) {
+        return this._request('/after-sales', 'POST', {
+            orderId: orderId,
+            userId: userId,
+            type: type,
+            reason: reason,
+            description: description || ''
+        });
+    },
+
+    getAfterSales: function(userId) {
+        return this._request('/after-sales?userId=' + userId, 'GET');
+    },
+
+    auditAfterSale: function(afterSaleId, status, adminReply) {
+        return this._request('/after-sales/audit', 'PUT', {
+            afterSaleId: afterSaleId,
+            status: status,
+            adminReply: adminReply || ''
+        });
+    },
+
+    // ================================================================
+    // 库存模块
+    // ================================================================
     getInventory: function() {
         return this._request('/inventory', 'GET');
     },
@@ -124,6 +298,9 @@ window.DataService = {
         return this._request('/inventory', 'POST', inventoryData);
     },
 
+    // ================================================================
+    // 财务模块
+    // ================================================================
     getFinance: function() {
         return this._request('/finance', 'GET');
     },
@@ -136,6 +313,9 @@ window.DataService = {
         return this._request('/finance?id=' + id, 'DELETE');
     },
 
+    // ================================================================
+    // 备份模块
+    // ================================================================
     exportBackup: function() {
         return this._request('/backup/export', 'GET');
     },
@@ -144,6 +324,9 @@ window.DataService = {
         return this._request('/backup/import', 'POST', { data: data });
     },
 
+    // ================================================================
+    // 管理员模块
+    // ================================================================
     adminLogin: function(username, password) {
         return this._request('/admin/login', 'POST', { username: username, password: password });
     },
@@ -168,6 +351,9 @@ window.DataService = {
         return this._request('/admin/change-password', 'POST', { id: id, oldPassword: oldPassword, newPassword: newPassword });
     },
 
+    // ================================================================
+    // 支付确认
+    // ================================================================
     paymentConfirm: function(orderId, transactionId, paymentData) {
         return this._request('/payment/confirm', 'POST', {
             orderId: orderId,
@@ -177,6 +363,9 @@ window.DataService = {
         });
     },
 
+    // ================================================================
+    // 购物车（localStorage）
+    // ================================================================
     getCart: function() {
         try {
             var raw = localStorage.getItem('yizaoxian_cart');
@@ -188,6 +377,9 @@ window.DataService = {
         localStorage.setItem('yizaoxian_cart', JSON.stringify(cart));
     },
 
+    // ================================================================
+    // 兼容旧版
+    // ================================================================
     getAppData: function() {
         var self = this;
         return Promise.all([

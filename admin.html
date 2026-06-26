@@ -64,7 +64,7 @@
     <!-- ===== 后台主界面 ===== -->
     <div id="adminApp" style="display:none;">
         <header class="admin-header">
-            <div class="admin-title">📊 宜早鲜 · 管理后台 <small>v3.0</small></div>
+            <div class="admin-title">📊 宜早鲜 · 管理后台 <small>v4.0</small></div>
             <div class="admin-actions">
                 <span id="adminUserDisplay" style="font-size:13px;opacity:0.8;margin-right:12px;"></span>
                 <button onclick="window.location.href='index.html'">返回前台</button>
@@ -79,6 +79,10 @@
             <button class="admin-nav-item" data-admin="inventory" onclick="AdminApp.switchPage('inventory')">📋 库存</button>
             <button class="admin-nav-item" data-admin="orders" onclick="AdminApp.switchPage('orders')">📄 订单</button>
             <button class="admin-nav-item" data-admin="finance" onclick="AdminApp.switchPage('finance')">💰 财务</button>
+            <button class="admin-nav-item" data-admin="reviews" onclick="AdminApp.switchPage('reviews')">⭐ 评价</button>
+            <button class="admin-nav-item" data-admin="after_sales" onclick="AdminApp.switchPage('after_sales')">🔄 售后</button>
+            <button class="admin-nav-item" data-admin="coupons" onclick="AdminApp.switchPage('coupons')">🎫 优惠券</button>
+            <button class="admin-nav-item" data-admin="messages" onclick="AdminApp.switchPage('messages')">📬 消息</button>
             <button class="admin-nav-item" data-admin="backup" onclick="AdminApp.switchPage('backup')">⏰ 备份</button>
             <button class="admin-nav-item" data-admin="members" onclick="AdminApp.switchPage('members')">👥 成员</button>
             <button class="admin-nav-item" data-admin="profile" onclick="AdminApp.switchPage('profile')">👤 个人中心</button>
@@ -89,6 +93,10 @@
         <div class="admin-page" id="admin-inventory"></div>
         <div class="admin-page" id="admin-orders"></div>
         <div class="admin-page" id="admin-finance"></div>
+        <div class="admin-page" id="admin-reviews"></div>
+        <div class="admin-page" id="admin-after-sales"></div>
+        <div class="admin-page" id="admin-coupons"></div>
+        <div class="admin-page" id="admin-messages"></div>
         <div class="admin-page" id="admin-backup"></div>
         <div class="admin-page" id="admin-members"></div>
         <div class="admin-page" id="admin-profile"></div>
@@ -114,7 +122,6 @@
     <script src="js/init.js"></script>
 
     <script>
-        // ★★★ 定义全局 closeModal ★★★
         window.closeModal = function() {
             var overlay = document.getElementById('modalOverlay');
             if (overlay) overlay.classList.remove('active');

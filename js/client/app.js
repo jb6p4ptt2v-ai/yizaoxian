@@ -57,6 +57,7 @@ window.ClientApp = {
         }
 
         this.updateBadges();
+        this.updateMessageBadge();
     },
 
     toggleAuth: function() {
@@ -107,6 +108,9 @@ window.ClientApp = {
             case 'cart': if (ClientPages) ClientPages.renderCart(); break;
             case 'orders': if (ClientPages) ClientPages.renderOrders(); break;
             case 'profile': if (ClientPages) ClientPages.renderProfile(); break;
+            case 'favorites': if (ClientPages) ClientPages.renderFavorites(); break;
+            case 'coupons': if (ClientPages) ClientPages.renderCoupons(); break;
+            case 'messages': if (ClientPages) ClientPages.renderMessages(); break;
             default: break;
         }
 
@@ -135,6 +139,20 @@ window.ClientApp = {
         } catch(e) {
             console.warn('更新角标失败:', e.message);
         }
+    },
+
+    updateMessageBadge: function() {
+        var user = Auth.getCurrentUser();
+        if (!user || !user.id) return;
+        DataService.getMessages(user.id).then(function(result) {
+            var badge = document.getElementById('messageBadge');
+            if (badge && result.unread > 0) {
+                badge.textContent = result.unread;
+                badge.style.display = 'flex';
+            } else if (badge) {
+                badge.style.display = 'none';
+            }
+        }).catch(function() {});
     },
 
     isLoggedIn: function() {
