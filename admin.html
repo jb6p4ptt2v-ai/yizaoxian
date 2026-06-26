@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>宜早鲜 · 管理后台</title>
+    <link rel="stylesheet" href="css/style.css">
+    <script>
+        window.__ENV__ = {
+            AMAP_KEY: '{{AMAP_KEY}}',
+            AMAP_SECURITY_KEY: '{{AMAP_SECURITY_KEY}}',
+            API_BASE: '{{API_BASE}}'
+        };
+        if (!window.__ENV__.AMAP_KEY || window.__ENV__.AMAP_KEY === '{{AMAP_KEY}}') {
+            console.warn('⚠️ 管理后台：高德地图 Key 未配置');
+        }
+        if (!window.__ENV__.AMAP_SECURITY_KEY || window.__ENV__.AMAP_SECURITY_KEY === '{{AMAP_SECURITY_KEY}}') {
+            console.warn('⚠️ 管理后台：高德地图安全密钥未配置');
+        }
+        console.log('✅ 管理后台环境变量已加载:', window.__ENV__);
+    </script>
+    <script>
+        (function() {
+            var securityKey = window.__ENV__ && window.__ENV__.AMAP_SECURITY_KEY;
+            var key = window.__ENV__ && window.__ENV__.AMAP_KEY;
+            if (!key || !securityKey) {
+                console.error('❌ 管理后台：高德地图密钥或安全密钥缺失，地图功能不可用');
+                return;
+            }
+            window._AMapSecurityConfig = {
+                securityJsCode: securityKey
+            };
+            var script = document.createElement('script');
+            script.src = 'https://webapi.amap.com/maps?v=2.0&key=' + key + '&plugin=AMap.PlaceSearch,AMap.Geocoder';
+            script.onload = function() {
+                console.log('✅ 管理后台高德地图加载完成');
+            };
+            script.onerror = function() {
+                console.error('❌ 管理后台高德地图加载失败，请检查网络和密钥');
+            };
+            document.head.appendChild(script);
+        })();
+    </script>
+</head>
+<body>
+    <div id="adminLoginPage" style="display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100vh;background:#fff;padding:24px 20px;">
+        <div style="width:100%;max-width:380px;background:#fff;border-radius:12px;padding:32px 24px;box-shadow:0 2px 12px rgba(0,0,0,0.06);border:1px solid #e8ecf0;">
+            <div style="font-size:28px;font-weight:700;color:#00b04a;text-align:center;margin-bottom:8px;">📊 管理后台</div>
+            <div style="text-align:center;color:#666;font-size:14px;margin-bottom:24px;">管理员登录</div>
+            <div id="loginError" class="error-msg" style="display:none;background:#fef0f0;color:#ff3b30;font-size:13px;text-align:center;padding:6px;border-radius:6px;margin-bottom:12px;"></div>
+            <div style="margin-bottom:16px;">
+                <label style="display:block;font-weight:500;margin-bottom:4px;font-size:13px;color:#666;">用户名</label>
+                <input id="loginUsername" placeholder="请输入用户名" style="font-size:14px;border:1px solid #e8ecf0;border-radius:8px;padding:10px 12px;width:100%;outline:none;">
+            </div>
+            <div style="margin-bottom:16px;">
+                <label style="display:block;font-weight:500;margin-bottom:4px;font-size:13px;color:#666;">密码</label>
+                <input id="loginPassword" type="password" placeholder="请输入密码" style="font-size:14px;border:1px solid #e8ecf0;border-radius:8px;padding:10px 12px;width:100%;outline:none;">
+            </div>
+            <button onclick="Auth.handleAdminLogin()" style="width:100%;padding:12px;background:#00b04a;color:#fff;border:none;border-radius:10px;font-weight:600;font-size:16px;cursor:pointer;">登 录</button>
+        </div>
+    </div>
+
+    <div id="adminApp" style="display:none;">
+        <header class="admin-header">
+            <div class="admin-title">📊 宜早鲜 · 管理后台 <small>v3.0</small></div>
+            <div class="admin-actions">
+                <span id="adminUserDisplay" style="font-size:13px;opacity:0.8;margin-right:12px;"></span>
+                <button onclick="window.location.href='index.html'">返回前台</button>
+                <button onclick="AdminBackup.manualBackup()">💾备份</button>
+                <button onclick="Auth.logoutAdmin()">退出</button>
+            </div>
+        </header>
+        <nav class="admin-nav" id="adminNav">
+            <button class="admin-nav-item active" data-admin="dashboard" onclick="AdminApp.switchPage('dashboard')">📊 概览</button>
+            <button class="admin-nav-item" data-admin="suppliers" onclick="AdminApp.switchPage('suppliers')">🏢 供应商</button>
+            <button class="admin-nav-item" data-admin="products" onclick="AdminApp.switchPage('products')">📦 商品</button>
+            <button class="admin-nav-item" data-admin="inventory" onclick="AdminApp.switchPage('inventory')">📋 库存</button>
+            <button class="admin-nav-item" data-admin="orders" onclick="AdminApp.switchPage('orders')">📄 订单</button>
+            <button class="admin-nav-item" data-admin="finance" onclick="AdminApp.switchPage('finance')">💰 财务</button>
+            <button class="admin-nav-item" data-admin="backup" onclick="AdminApp.switchPage('backup')">⏰ 备份</button>
+            <button class="admin-nav-item" data-admin="members" onclick="AdminApp.switchPage('members')">👥 成员</button>
+            <button class="admin-nav-item" data-admin="profile" onclick="AdminApp.switchPage('profile')">👤 个人中心</button>
+        </nav>
+        <div class="admin-page active" id="admin-dashboard"></div>
+        <div class="admin-page" id="admin-suppliers"></div>
+        <div class="admin-page" id="admin-products"></div>
+        <div class="admin-page" id="admin-inventory"></div>
+        <div class="admin-page" id="admin-orders"></div>
+        <div class="admin-page" id="admin-finance"></div>
+        <div class="admin-page" id="admin-backup"></div>
+        <div class="admin-page" id="admin-members"></div>
+        <div class="admin-page" id="admin-profile"></div>
+    </div>
+
+    <div class="modal-overlay" id="modalOverlay"><div class="modal-box" id="modalContent"></div></div>
+    <div id="backupToast" class="backup-toast"></div>
+
+    <script src="js/config.js"></script>
+    <script src="js/utils.js"></script>
+    <script src="js/data-service.js"></script>
+    <script src="js/region.js"></script>
+    <script src="js/map-service.js"></script>
+    <script src="js/auth.js"></script>
+    <script src="js/admin/backup.js"></script>
+    <script src="js/admin/app.js"></script>
+    <script src="js/admin/pages.js"></script>
+    <script src="js/location-helper.js"></script>
+    <script src="js/init.js"></script>
+
+    <script>
+        // ★★★ 唯一新增：closeModal ★★★
+        window.closeModal = function() {
+            var overlay = document.getElementById('modalOverlay');
+            if (overlay) overlay.classList.remove('active');
+        };
+
+        document.addEventListener('DOMContentLoaded', function() {
+            var admin = Auth.getCurrentAdmin();
+            if (admin) {
+                document.getElementById('adminLoginPage').style.display = 'none';
+                document.getElementById('adminApp').style.display = 'block';
+                var display = document.getElementById('adminUserDisplay');
+                if (display) display.textContent = '👤 ' + (admin.username || '');
+                AdminApp.init(admin);
+            } else {
+                document.getElementById('adminLoginPage').style.display = 'flex';
+                document.getElementById('adminApp').style.display = 'none';
+            }
+        });
+    </script>
+</body>
+</html>

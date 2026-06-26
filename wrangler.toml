@@ -1,0 +1,8 @@
+name = "yizaoxian-api"
+main = "workers/api.js"
+compatibility_date = "2024-01-01"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "yizaoxian"
+database_id = "b4ada3c8-6d20-4e2e-81ba-4bedeff513c5"

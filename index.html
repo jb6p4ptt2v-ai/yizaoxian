@@ -1,0 +1,226 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>宜早鲜 · 农家菜</title>
+    <link rel="stylesheet" href="css/style.css">
+    <!-- ===== 环境变量（由 Cloudflare Pages 替换） ===== -->
+    <script>
+        window.__ENV__ = {
+            AMAP_KEY: '{{AMAP_KEY}}',
+            AMAP_SECURITY_KEY: '{{AMAP_SECURITY_KEY}}',
+            API_BASE: '{{API_BASE}}'
+        };
+        // 如果环境变量未设置，页面将无法使用地图功能，提示用户配置
+        if (!window.__ENV__.AMAP_KEY || window.__ENV__.AMAP_KEY === '{{AMAP_KEY}}') {
+            console.warn('⚠️ 高德地图 Key 未配置，请设置环境变量 AMAP_KEY');
+        }
+        if (!window.__ENV__.AMAP_SECURITY_KEY || window.__ENV__.AMAP_SECURITY_KEY === '{{AMAP_SECURITY_KEY}}') {
+            console.warn('⚠️ 高德地图安全密钥未配置，请设置环境变量 AMAP_SECURITY_KEY');
+        }
+        console.log('✅ 环境变量已加载:', window.__ENV__);
+    </script>
+    <!-- ===== 高德地图 JS API（配置安全密钥） ===== -->
+    <script>
+        (function() {
+            var securityKey = window.__ENV__ && window.__ENV__.AMAP_SECURITY_KEY;
+            var key = window.__ENV__ && window.__ENV__.AMAP_KEY;
+            if (!key || !securityKey) {
+                console.error('❌ 高德地图密钥或安全密钥缺失，地图功能不可用');
+                return;
+            }
+            window._AMapSecurityConfig = {
+                securityJsCode: securityKey
+            };
+            var script = document.createElement('script');
+            script.src = 'https://webapi.amap.com/maps?v=2.0&key=' + key + '&plugin=AMap.PlaceSearch,AMap.Geocoder';
+            script.onload = function() {
+                console.log('✅ 高德地图加载完成');
+            };
+            script.onerror = function() {
+                console.error('❌ 高德地图加载失败，请检查网络和密钥');
+            };
+            document.head.appendChild(script);
+        })();
+    </script>
+</head>
+<body>
+    <!-- ========== 认证页面 ========== -->
+    <div id="authApp">
+        <!-- 登录 -->
+        <div id="auth-login" class="auth-page active">
+            <div class="auth-box">
+                <div class="auth-title">🥬 宜早鲜</div>
+                <div class="auth-sub">登录您的账户</div>
+                <div id="loginError" class="error-msg"></div>
+                <div class="form-group"><label>手机号</label><input id="loginPhone" placeholder="请输入手机号"></div>
+                <div class="form-group"><label>密码</label><input id="loginPassword" type="password" placeholder="请输入密码"></div>
+                <button class="btn-primary" onclick="Auth.handleLogin()">登 录</button>
+                <div class="auth-link">还没有账号？ <a href="#" onclick="Auth.showPage('register')">立即注册</a></div>
+                <div class="auth-link"><a href="#" onclick="Auth.showPage('forgot')">忘记密码？</a></div>
+            </div>
+        </div>
+        <!-- 注册 -->
+        <div id="auth-register" class="auth-page">
+            <div class="auth-box">
+                <div class="auth-title">🥬 注册</div>
+                <div class="auth-sub">使用手机号注册</div>
+                <div id="registerError" class="error-msg"></div>
+                <div id="registerSuccess" class="success-msg"></div>
+                <div class="form-group"><label>手机号 *</label><input id="regPhone" placeholder="请输入手机号"></div>
+                <div class="form-group"><label>密码 *（至少6位）</label><input id="regPassword" type="password" placeholder="请设置密码"></div>
+                <div class="form-group">
+                    <label>密保问题</label>
+                    <select id="regQuestion">
+                        <option value="您的出生地是？">您的出生地是？</option>
+                        <option value="您母亲的姓名是？">您母亲的姓名是？</option>
+                        <option value="您最喜爱的宠物名字？">您最喜爱的宠物名字？</option>
+                        <option value="您的小学名称？">您的小学名称？</option>
+                    </select>
+                </div>
+                <div class="form-group"><label>密保答案 *</label><input id="regAnswer" placeholder="请设置答案"></div>
+                <button class="btn-primary" onclick="Auth.handleRegister()">注 册</button>
+                <div class="auth-link">已有账号？ <a href="#" onclick="Auth.showPage('login')">去登录</a></div>
+            </div>
+        </div>
+        <!-- 找回密码 -->
+        <div id="auth-forgot" class="auth-page">
+            <div class="auth-box">
+                <div class="auth-title">🔑 找回密码</div>
+                <div class="auth-sub">验证密保问题重置密码</div>
+                <div id="forgotError" class="error-msg"></div>
+                <div id="forgotSuccess" class="success-msg"></div>
+                <div class="form-group"><label>手机号</label><input id="forgotPhone" placeholder="请输入注册手机号"></div>
+                <div id="forgotQuestionGroup" class="form-group question-group" style="display:none;">
+                    <label id="forgotQuestionLabel">密保问题：</label>
+                    <input id="forgotAnswer" placeholder="请输入答案">
+                </div>
+                <div class="form-group" id="forgotNewPassGroup" style="display:none;">
+                    <label>新密码</label>
+                    <input id="forgotNewPassword" type="password" placeholder="设置新密码（至少6位）">
+                </div>
+                <button class="btn-primary" id="forgotBtn" onclick="Auth.handleForgotStep()">下一步</button>
+                <div class="auth-link">想起密码？ <a href="#" onclick="Auth.showPage('login')">去登录</a></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ========== 客户端主界面 ========== -->
+    <div id="clientApp" style="display:none;">
+        <header class="app-header">
+            <div class="logo"><span>🥬</span> 宜早鲜</div>
+            <div class="header-actions">
+                <span style="font-size:13px;opacity:0.9;" id="clientUserDisplay">用户</span>
+                <button onclick="Auth.logout()">退出</button>
+                <span class="header-badge">
+                    <button onclick="ClientApp.navigateTo('cart')">🛒</button>
+                    <span class="badge" id="cartBadge">0</span>
+                </span>
+            </div>
+        </header>
+        <div class="container">
+            <!-- 首页 -->
+            <div id="page-home" class="page active">
+                <div class="search-bar">
+                    <input type="text" id="searchInput" placeholder="搜索农家菜..." oninput="ClientPages.filterProducts()">
+                    <button class="search-btn" onclick="ClientPages.filterProducts()">搜索</button>
+                </div>
+                <div class="category-tabs" id="categoryTabs">
+                    <button class="cat-tab active" data-cat="全部" onclick="ClientPages.filterByCategory('全部')">全部</button>
+                    <button class="cat-tab" data-cat="蔬菜" onclick="ClientPages.filterByCategory('蔬菜')">🥬 蔬菜</button>
+                    <button class="cat-tab" data-cat="水果" onclick="ClientPages.filterByCategory('水果')">🍎 水果</button>
+                    <button class="cat-tab" data-cat="肉禽" onclick="ClientPages.filterByCategory('肉禽')">🍗 肉禽</button>
+                    <button class="cat-tab" data-cat="水产" onclick="ClientPages.filterByCategory('水产')">🐟 水产</button>
+                    <button class="cat-tab" data-cat="粮油" onclick="ClientPages.filterByCategory('粮油')">🌾 粮油</button>
+                    <button class="cat-tab" data-cat="干货" onclick="ClientPages.filterByCategory('干货')">🥜 干货</button>
+                </div>
+                <div id="productGrid" class="product-grid"></div>
+            </div>
+            <!-- 购物车 -->
+            <div id="page-cart" class="page">
+                <h3 style="margin:8px 0 12px;">🛒 我的购物车</h3>
+                <div id="cartList"></div>
+                <div id="cartEmpty" class="cart-empty"><div class="empty-icon">🛒</div><p>购物车是空的</p></div>
+                <div id="cartFooter" class="cart-total hidden">
+                    <div><div style="font-size:13px;color:var(--text-secondary);">合计</div><div class="total-price" id="cartTotalPrice">¥0.00</div></div>
+                    <button class="checkout-btn" onclick="ClientPages.showCheckout()">去结算</button>
+                </div>
+            </div>
+            <!-- 订单 -->
+            <div id="page-orders" class="page">
+                <h3 style="margin:8px 0 12px;">📦 我的订单</h3>
+                <div class="order-tabs">
+                    <button class="order-tab active" data-status="全部" onclick="ClientPages.filterOrders('全部')">全部</button>
+                    <button class="order-tab" data-status="pending" onclick="ClientPages.filterOrders('pending')">待发货</button>
+                    <button class="order-tab" data-status="shipped" onclick="ClientPages.filterOrders('shipped')">配送中</button>
+                    <button class="order-tab" data-status="completed" onclick="ClientPages.filterOrders('completed')">已完成</button>
+                </div>
+                <div id="orderList"></div>
+                <div id="orderEmpty" class="cart-empty"><div class="empty-icon">📭</div><p>暂无订单</p></div>
+            </div>
+            <!-- 个人中心 -->
+            <div id="page-profile" class="page">
+                <div class="profile-card">
+                    <div class="avatar">🧑‍🌾</div>
+                    <div class="name" id="profileName">用户</div>
+                    <div class="phone" id="profilePhone">新鲜 · 健康 · 农家</div>
+                </div>
+                <div class="profile-stats">
+                    <div class="stat-item"><div class="num" id="statOrders">0</div><div class="label">总订单</div></div>
+                    <div class="stat-item"><div class="num" id="statCompleted">0</div><div class="label">已完成</div></div>
+                    <div class="stat-item"><div class="num" id="statCart">0</div><div class="label">购物车</div></div>
+                </div>
+                <div class="profile-menu">
+                    <button class="menu-item" onclick="ClientApp.navigateTo('orders')">📦 我的订单 <span>›</span></button>
+                    <button class="menu-item" onclick="ClientApp.navigateTo('cart')">🛒 购物车 <span>›</span></button>
+                    <button class="menu-item" onclick="ClientPages.showAddressManager()">📍 收货地址 <span>›</span></button>
+                    <button class="menu-item" id="adminEntryBtn" style="display:none;" onclick="window.location.href='admin.html'">🔐 管理后台 <span>›</span></button>
+                    <button class="menu-item" onclick="Auth.logout()">🚪 退出登录 <span>›</span></button>
+                </div>
+                <div style="text-align:center;font-size:11px;color:var(--text-secondary);padding:20px 0;">
+                    🌱 宜早鲜 · 农家菜直达
+                </div>
+            </div>
+        </div>
+        <!-- 底部导航 -->
+        <nav class="bottom-nav">
+            <button class="nav-item active" data-page="home" onclick="ClientApp.navigateTo('home')"><span class="nav-icon">🏠</span><span>首页</span></button>
+            <button class="nav-item" data-page="cart" onclick="ClientApp.navigateTo('cart')"><span class="nav-icon">🛒</span><span>购物车</span><span class="nav-badge" id="navCartBadge" style="display:none;">0</span></button>
+            <button class="nav-item" data-page="orders" onclick="ClientApp.navigateTo('orders')"><span class="nav-icon">📦</span><span>订单</span></button>
+            <button class="nav-item" data-page="profile" onclick="ClientApp.navigateTo('profile')"><span class="nav-icon">👤</span><span>我的</span></button>
+        </nav>
+    </div>
+
+    <!-- ========== 全局弹窗 ========== -->
+    <div class="modal-overlay" id="modalOverlay"><div class="modal-box" id="modalContent"></div></div>
+    <div id="backupToast" class="backup-toast"></div>
+
+    <!-- ========== JS 模块 ========== -->
+    <script src="js/config.js"></script>
+    <script src="js/utils.js"></script>
+    <script src="js/data-service.js"></script>
+    <script src="js/region.js"></script>
+    <script src="js/map-service.js"></script>
+    <script src="js/auth.js"></script>
+    <script src="js/admin/backup.js"></script>
+    <script src="js/client/app.js"></script>
+    <script src="js/client/pages.js"></script>
+    <script src="js/init.js"></script>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            var user = Auth.getCurrentUser();
+            if (user) {
+                if (user.role === 'admin') {
+                    window.location.href = 'admin.html';
+                    return;
+                }
+                ClientApp.init(user);
+            } else {
+                Auth.showPage('login');
+            }
+        });
+    </script>
+</body>
+</html>
