@@ -431,6 +431,10 @@ window.ClientPages = {
         });
     },
 
+    // ================================================================
+    // ★★★ 地址管理（拼多多风格：列表+左滑+定位弹窗） ★★★
+    // ================================================================
+
     showAddressManager: function() {
         var user = Auth.getCurrentUser();
         if (!user) {
@@ -504,6 +508,8 @@ window.ClientPages = {
         if (existing) {
             existing.innerHTML = html;
             existing.style.display = 'block';
+            // 重新绑定左滑
+            this._initSwipe();
             return;
         }
         var container = document.createElement('div');
@@ -524,21 +530,31 @@ window.ClientPages = {
         this.renderProfile();
     },
 
+    // ================================================================
+    // ★★★ 左滑交互（拼多多风格） ★★★
+    // ================================================================
     _initSwipe: function() {
-        var items = document.querySelectorAll('.address-item-wrapper');
-        var self = this;
-        var startX = 0;
-        var currentOffset = 0;
+        var wrappers = document.querySelectorAll('.address-item-wrapper');
         var threshold = 60;
 
-        items.forEach(function(wrapper) {
+        wrappers.forEach(function(wrapper) {
             var item = wrapper.querySelector('.address-item');
             var swipe = wrapper.querySelector('.address-item-swipe');
 
+            if (!item || !swipe) return;
+
+            var startX = 0;
+            var currentX = 0;
+            var isDragging = false;
+
+            // 触摸事件
             wrapper.addEventListener('touchstart', function(e) {
                 var touch = e.touches[0];
                 startX = touch.clientX;
-                currentOffset = 0;
+                currentX = 0;
+                isDragging = true;
+
+                // 关闭其他已展开的
                 document.querySelectorAll('.address-item-wrapper.swipe-open').forEach(function(el) {
                     if (el !== wrapper) {
                         el.classList.remove('swipe-open');
@@ -548,36 +564,40 @@ window.ClientPages = {
             }, { passive: true });
 
             wrapper.addEventListener('touchmove', function(e) {
+                if (!isDragging) return;
                 var touch = e.touches[0];
                 var diff = touch.clientX - startX;
-                if (diff > 0) {
-                    wrapper.classList.remove('swipe-open');
-                    item.style.transform = 'translateX(0)';
-                    return;
-                }
-                var offset = Math.max(-150, diff);
+                // 只允许左滑（负值），右滑回弹
+                var offset = Math.min(0, diff);
+                // 限制最大左滑距离为150px
+                offset = Math.max(-150, offset);
                 item.style.transform = 'translateX(' + offset + 'px)';
-                currentOffset = offset;
+                currentX = offset;
             }, { passive: true });
 
             wrapper.addEventListener('touchend', function(e) {
-                if (currentOffset < -threshold) {
+                if (!isDragging) return;
+                isDragging = false;
+                if (currentX < -threshold) {
                     wrapper.classList.add('swipe-open');
                     item.style.transform = 'translateX(-150px)';
                 } else {
                     wrapper.classList.remove('swipe-open');
                     item.style.transform = 'translateX(0)';
                 }
-                currentOffset = 0;
+                currentX = 0;
             }, { passive: true });
 
-            var isDragging = false;
+            // 鼠标事件（PC调试支持）
             var mouseStartX = 0;
+            var mouseDragging = false;
+
             wrapper.addEventListener('mousedown', function(e) {
                 if (e.target.closest('.address-item-actions') || e.target.closest('.address-item-swipe')) return;
-                isDragging = true;
                 mouseStartX = e.clientX;
-                currentOffset = 0;
+                mouseDragging = true;
+                currentX = 0;
+
                 document.querySelectorAll('.address-item-wrapper.swipe-open').forEach(function(el) {
                     if (el !== wrapper) {
                         el.classList.remove('swipe-open');
@@ -587,33 +607,41 @@ window.ClientPages = {
             });
 
             document.addEventListener('mousemove', function(e) {
-                if (!isDragging || wrapper !== document.querySelector('.address-item-wrapper:hover')) return;
-                var diff = e.clientX - mouseStartX;
-                if (diff > 0) {
+                if (!mouseDragging) return;
+                // 检测是否在wrapper内
+                var rect = wrapper.getBoundingClientRect();
+                if (e.clientX < rect.left || e.clientX > rect.right || e.clientY < rect.top || e.clientY > rect.bottom) {
+                    // 鼠标移出wrapper，回弹
                     wrapper.classList.remove('swipe-open');
                     item.style.transform = 'translateX(0)';
+                    mouseDragging = false;
                     return;
                 }
-                var offset = Math.max(-150, diff);
+                var diff = e.clientX - mouseStartX;
+                var offset = Math.min(0, diff);
+                offset = Math.max(-150, offset);
                 item.style.transform = 'translateX(' + offset + 'px)';
-                currentOffset = offset;
+                currentX = offset;
             });
 
             document.addEventListener('mouseup', function(e) {
-                if (!isDragging) return;
-                isDragging = false;
-                if (currentOffset < -threshold) {
+                if (!mouseDragging) return;
+                mouseDragging = false;
+                if (currentX < -threshold) {
                     wrapper.classList.add('swipe-open');
                     item.style.transform = 'translateX(-150px)';
                 } else {
                     wrapper.classList.remove('swipe-open');
                     item.style.transform = 'translateX(0)';
                 }
-                currentOffset = 0;
+                currentX = 0;
             });
         });
     },
 
+    // ================================================================
+    // ★★★ 地址表单 ★★★
+    // ================================================================
     openAddressForm: function(addressId) {
         var user = Auth.getCurrentUser();
         if (!user) {
@@ -701,7 +729,7 @@ window.ClientPages = {
         this.showAddressManager();
     },
 
-    // ★★★ 定位填充（调用公共模块） ★★★
+    // ★★★ 定位填充（调用公共模块 LocationHelper） ★★★
     fillAddressByLocation: function() {
         LocationHelper.pickAddress({
             addressInputId: 'addr_address',
@@ -710,7 +738,6 @@ window.ClientPages = {
         });
     },
 
-    // 保留空方法以防调用
     _showAddressPicker: function() {},
 
     openMapPickerForAddress: function(lng, lat) {

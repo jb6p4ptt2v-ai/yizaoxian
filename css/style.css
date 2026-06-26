@@ -1029,7 +1029,9 @@ textarea {
     margin-bottom: 16px;
 }
 
-/* ===== 地址列表卡片 + 左滑交互 ===== */
+/* ================================================================
+   ★★★ 地址列表卡片 + 左滑交互（拼多多风格） ★★★
+   ================================================================ */
 .address-item-wrapper {
     position: relative;
     overflow: hidden;
@@ -1070,6 +1072,7 @@ textarea {
     cursor: pointer;
     display: flex;
     align-items: center;
+    min-height: 60px;
 }
 
 .swipe-btn-set-default {
@@ -1272,7 +1275,7 @@ textarea {
     transform: scale(0.95);
 }
 
-/* ===== 省市区联动选择（在地址表单中） ===== */
+/* ===== 省市区联动选择 ===== */
 .address-form #region_province,
 .address-form #region_city,
 .address-form #region_district {
@@ -1290,6 +1293,23 @@ textarea {
 .address-form #region_city:focus,
 .address-form #region_district:focus {
     border-color: var(--primary);
+}
+
+/* ===== Toast 消息 ===== */
+.toast-message {
+    position: fixed;
+    top: 20%;
+    left: 50%;
+    transform: translateX(-50%);
+    background: rgba(0, 0, 0, 0.75);
+    color: #fff;
+    padding: 10px 24px;
+    border-radius: 20px;
+    z-index: 10000;
+    font-size: 14px;
+    max-width: 80%;
+    text-align: center;
+    pointer-events: none;
 }
 
 /* ===== 响应式 ===== */

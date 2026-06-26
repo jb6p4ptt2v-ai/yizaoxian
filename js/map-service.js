@@ -74,7 +74,6 @@ window.MapService = (function() {
         _confirmPick: _confirmPick
     };
 
-    // 修复：在 publicAPI 定义完成后设置只读属性
     Object.defineProperty(publicAPI, '_isInitialized', {
         get: function() { return _isInitialized; },
         enumerable: true,
@@ -187,6 +186,7 @@ window.MapService = (function() {
         );
     }
 
+    // ★★★ 搜索附近POI ★★★
     function searchNearby(lng, lat, keyword, callback) {
         _loadMap(function() {
             if (typeof AMap === 'undefined' || !AMap.PlaceSearch) {
@@ -194,6 +194,7 @@ window.MapService = (function() {
                 if (callback) callback([]);
                 return;
             }
+
             var placeSearch = new AMap.PlaceSearch({
                 type: '商务住宅|地名地址|餐饮服务|生活服务',
                 pageSize: 30,
@@ -203,7 +204,10 @@ window.MapService = (function() {
             });
 
             var searchKeyword = keyword && keyword.trim() ? keyword.trim() : '';
-            placeSearch.searchNearBy(searchKeyword, [lng, lat], 3000, function(status, result) {
+            var radius = 3000; // 搜索半径3000米
+
+            // 使用 searchNearBy 搜索周边POI
+            placeSearch.searchNearBy(searchKeyword, [lng, lat], radius, function(status, result) {
                 if (status === 'complete' && result.poiList) {
                     var pois = result.poiList.pois || [];
                     callback(pois.map(function(p) {
@@ -218,7 +222,29 @@ window.MapService = (function() {
                         };
                     }));
                 } else {
-                    callback([]);
+                    // 如果搜索失败，尝试无关键词搜索
+                    if (searchKeyword) {
+                        placeSearch.searchNearBy('', [lng, lat], radius, function(status2, result2) {
+                            if (status2 === 'complete' && result2.poiList) {
+                                var pois2 = result2.poiList.pois || [];
+                                callback(pois2.map(function(p) {
+                                    return {
+                                        name: p.name,
+                                        address: p.address || '',
+                                        lng: p.location.getLng(),
+                                        lat: p.location.getLat(),
+                                        province: p.pcode || '',
+                                        city: p.cityname || '',
+                                        district: p.adname || ''
+                                    };
+                                }));
+                            } else {
+                                callback([]);
+                            }
+                        });
+                    } else {
+                        callback([]);
+                    }
                 }
             });
         });

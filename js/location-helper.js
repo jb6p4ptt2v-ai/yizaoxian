@@ -31,7 +31,6 @@ window.LocationHelper = (function() {
      * @param {Function} options.onBeforeLocate - 定位开始前的回调（可选）
      * @param {Function} options.onAddressPicked - 地址选中后的额外回调（可选）
      * @param {string} options.modalTitle - 弹窗标题（默认"选择收货地址"）
-     * @param {string} options.toastPrefix - Toast 前缀（用于区分前后台）
      */
     function pickAddress(options) {
         if (!options || !options.addressInputId) {
@@ -44,10 +43,9 @@ window.LocationHelper = (function() {
         var onBeforeLocate = options.onBeforeLocate || null;
         var onAddressPicked = options.onAddressPicked || null;
         var modalTitle = options.modalTitle || '选择收货地址';
-        var toastPrefix = options.toastPrefix || '';
 
         if (typeof Utils !== 'undefined' && Utils.toast) {
-            Utils.toast((toastPrefix ? toastPrefix + ' ' : '') + '⏳ 正在获取位置...');
+            Utils.toast('⏳ 正在获取位置...');
         }
 
         if (typeof MapService === 'undefined' || !MapService.locateCurrentPosition) {
@@ -76,6 +74,7 @@ window.LocationHelper = (function() {
             }
             console.log('🌐 经纬度:', lng, lat);
 
+            // 第一步：逆地理编码获取格式化地址和周边POI
             var geocoder = _getGeocoder();
             if (!geocoder) {
                 if (Utils && Utils.toast) Utils.toast('❌ 地图组件未就绪');
@@ -90,6 +89,8 @@ window.LocationHelper = (function() {
                     var addrComp = regeo.addressComponent || {};
 
                     var candidates = [];
+
+                    // 主地址（格式化地址）
                     if (formatted) {
                         candidates.push({
                             label: formatted,
@@ -102,10 +103,15 @@ window.LocationHelper = (function() {
                         });
                     }
 
+                    // 周边 POI（最多15个）
                     if (regeo.pois && regeo.pois.length > 0) {
-                        regeo.pois.slice(0, 5).forEach(function(poi) {
+                        regeo.pois.slice(0, 15).forEach(function(poi) {
+                            var poiLabel = poi.name;
+                            if (poi.address) {
+                                poiLabel = poi.name + '（' + poi.address + '）';
+                            }
                             candidates.push({
-                                label: poi.name + (poi.address ? '（' + poi.address + '）' : ''),
+                                label: poiLabel,
                                 province: addrComp.province || '',
                                 city: addrComp.city || '',
                                 district: addrComp.district || '',
@@ -116,6 +122,7 @@ window.LocationHelper = (function() {
                         });
                     }
 
+                    // 如果候选列表为空，至少放一个格式化地址
                     if (candidates.length === 0 && formatted) {
                         candidates.push({
                             label: formatted,
@@ -129,6 +136,8 @@ window.LocationHelper = (function() {
                     }
 
                     console.log('📋 候选地址数量:', candidates.length);
+
+                    // 第二步：弹窗展示备选地址列表
                     if (candidates.length > 0) {
                         _showAddressPicker({
                             candidates: candidates,
@@ -137,8 +146,7 @@ window.LocationHelper = (function() {
                             addressInputId: addressInputId,
                             regionData: regionData,
                             modalTitle: modalTitle,
-                            onAddressPicked: onAddressPicked,
-                            toastPrefix: toastPrefix
+                            onAddressPicked: onAddressPicked
                         });
                     } else {
                         if (Utils && Utils.toast) Utils.toast('❌ 未找到附近地址，请手动输入');
@@ -152,7 +160,7 @@ window.LocationHelper = (function() {
     }
 
     // ================================================================
-    // ★★★ 内部弹窗渲染 ★★★
+    // ★★★ 拼多多风格弹窗 - 展示备选地址列表 ★★★
     // ================================================================
     function _showAddressPicker(params) {
         var candidates = params.candidates;
@@ -162,7 +170,6 @@ window.LocationHelper = (function() {
         var regionData = params.regionData;
         var modalTitle = params.modalTitle || '选择收货地址';
         var onAddressPicked = params.onAddressPicked || null;
-        var toastPrefix = params.toastPrefix || '';
 
         console.log('🖥️ 显示地址选择弹窗，候选数:', candidates.length);
         var oldModal = document.getElementById('pddAddressModal');
@@ -180,7 +187,7 @@ window.LocationHelper = (function() {
         var card = document.createElement('div');
         card.style.cssText = `
             background: #fff; border-radius: 12px; width: 90%; max-width: 400px;
-            max-height: 70%; overflow: hidden; box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+            max-height: 75%; overflow: hidden; box-shadow: 0 10px 30px rgba(0,0,0,0.3);
             display: flex; flex-direction: column;
         `;
 
@@ -189,12 +196,13 @@ window.LocationHelper = (function() {
             padding: 16px 20px; border-bottom: 1px solid #eee;
             font-size: 16px; font-weight: bold; color: #333;
             display: flex; justify-content: space-between; align-items: center;
+            flex-shrink: 0;
         `;
         header.innerHTML = '<span>' + modalTitle + '</span><span style="font-size:14px;color:#999;cursor:pointer;" id="closePickerBtn">✕</span>';
 
         var listWrap = document.createElement('div');
         listWrap.style.cssText = `
-            overflow-y: auto; padding: 8px 0; flex:1;
+            overflow-y: auto; padding: 4px 0; flex:1;
         `;
 
         if (candidates.length === 0) {
@@ -203,15 +211,27 @@ window.LocationHelper = (function() {
             candidates.forEach(function(item) {
                 var div = document.createElement('div');
                 div.style.cssText = `
-                    padding: 14px 20px; border-bottom: 1px solid #f5f5f5;
-                    cursor: pointer; transition: background 0.15s;
-                    font-size: 14px; color: #333;
+                    padding: 12px 20px;
+                    border-bottom: 1px solid #f5f5f5;
+                    cursor: pointer;
+                    transition: background 0.15s;
+                    font-size: 14px;
+                    color: #333;
                 `;
-                div.textContent = item.label;
+                // 显示地址名称（突出显示）
+                var displayText = item.label;
+                // 如果label包含地址信息，可能太长，截取前30个字符
+                if (displayText.length > 40) {
+                    displayText = displayText.slice(0, 40) + '...';
+                }
+                div.textContent = displayText;
+                div.title = item.label; // 完整地址作为tooltip
+
                 div.onmouseenter = function() { div.style.background = '#f0f0f0'; };
                 div.onmouseleave = function() { div.style.background = 'transparent'; };
                 div.onclick = function() {
                     console.log('✅ 用户选择了地址:', item.label);
+                    // 填充省市区联动
                     if (regionData && typeof regionData.setSelected === 'function') {
                         try {
                             regionData.setSelected(item.province, item.city, item.district);
@@ -219,17 +239,22 @@ window.LocationHelper = (function() {
                             console.warn('regionData.setSelected 调用失败:', e);
                         }
                     }
+                    // 填充详细地址
                     var addrInput = document.getElementById(addressInputId);
                     if (addrInput) {
                         var fullAddr = item.detail || item.label;
+                        // 去掉省市区前缀（因为省市区已单独填充）
                         var prefix = '';
                         if (item.province) prefix += item.province;
                         if (item.city && item.city !== item.province) prefix += item.city;
                         if (item.district && item.district !== item.city) prefix += item.district;
                         if (prefix) {
-                            fullAddr = fullAddr.replace(prefix, '').trim().replace(/^[-,，、\s]+/, '');
+                            fullAddr = fullAddr.replace(prefix, '').trim();
+                            fullAddr = fullAddr.replace(/^[-,，、\s]+/, '');
                         }
-                        if (!fullAddr || fullAddr.length < 2) fullAddr = item.detail || item.label;
+                        if (!fullAddr || fullAddr.length < 2) {
+                            fullAddr = item.detail || item.label;
+                        }
                         addrInput.value = fullAddr;
                         addrInput.dataset.lng = lng || '';
                         addrInput.dataset.lat = lat || '';
@@ -249,7 +274,7 @@ window.LocationHelper = (function() {
                         }
                     }
                     overlay.remove();
-                    if (Utils && Utils.toast) Utils.toast((toastPrefix ? toastPrefix + ' ' : '') + '✅ 已选择地址');
+                    if (Utils && Utils.toast) Utils.toast('✅ 已选择地址');
                 };
                 listWrap.appendChild(div);
             });
@@ -276,6 +301,8 @@ window.LocationHelper = (function() {
     }
 
     return {
-        pickAddress: pickAddress
+        pickAddress: pickAddress,
+        _showAddressPicker: _showAddressPicker
     };
 })();
+console.log('✅ LocationHelper 已加载（拼多多风格弹窗选地址）');
