@@ -52,19 +52,26 @@ window.ClientPages = {
             grid.innerHTML = list.map(function(p) {
                 var stock = p.stock || 0;
                 var inCart = cart[p.id] || 0;
+                var stockClass = '';
+                var stockText = '';
+                if (stock <= 0) { stockClass = 'out'; stockText = '已售罄'; }
+                else if (stock < 10) { stockClass = 'low'; stockText = '仅剩' + stock; }
+                else { stockText = '库存 ' + stock; }
+
                 return '<div class="product-card">' +
                     '<div class="product-img">' + (p.emoji || '🥬') + '</div>' +
                     '<div class="product-info">' +
                     '<div class="product-name">' + (p.name || '未命名') + '</div>' +
-                    '<div style="font-size:12px;color:var(--text-secondary);">' + (p.unit || '份') + '</div>' +
+                    '<div class="product-unit">' + (p.unit || '份') + '</div>' +
                     '<div class="product-meta">' +
-                    '<div><span class="product-price">' + Utils.formatPrice(p.price || 0) + '</span>' +
-                    (stock < 10 ? '<span style="font-size:11px;color:#ff3b30;margin-left:4px;">仅剩' + stock + '</span>' : '') +
+                    '<div class="product-price">' +
+                    '<span class="price-symbol">¥</span>' + (p.price || 0).toFixed(2) +
+                    '<span class="price-unit">/' + (p.unit || '份') + '</span>' +
                     '</div>' +
-                    '<button class="add-cart-btn" onclick="ClientPages.addToCart(\'' + p.id + '\')" ' + (stock <= 0 ? 'disabled style="opacity:0.4;"' : '') + '>+</button>' +
+                    '<button class="add-cart-btn" onclick="ClientPages.addToCart(\'' + p.id + '\')" ' + (stock <= 0 ? 'disabled' : '') + '>+</button>' +
                     '</div>' +
-                    (inCart > 0 ? '<div style="font-size:12px;color:var(--primary);margin-top:2px;">已选 ' + inCart + ' 份</div>' : '') +
-                    '<div class="stock-tag">' + (stock > 0 ? '库存 ' + stock : '🟡 缺货') + '</div>' +
+                    '<span class="stock-tag ' + stockClass + '">' + stockText + '</span>' +
+                    (inCart > 0 ? '<span class="selected-tag">已选 ' + inCart + ' 份</span>' : '') +
                     '</div></div>';
             }).join('');
         }).catch(function(err) {
@@ -200,6 +207,12 @@ window.ClientPages = {
             return;
         }
 
+        if (!ClientApp.requireAuth(function() {
+            ClientPages.showCheckout();
+        })) {
+            return;
+        }
+
         var user = Auth.getCurrentUser();
         if (!user) {
             Utils.toast('请先登录');
@@ -314,13 +327,25 @@ window.ClientPages = {
                         total: total
                     };
 
-                    DataService.saveOrder(orderData).then(function() {
+                    DataService.saveOrder(orderData).then(function(orderResult) {
                         DataService.saveCart({});
                         if (window.ClientApp) window.ClientApp.updateBadges();
                         window.ClientPages.renderCart();
                         window.ClientPages.renderProducts();
-                        Utils.toast('🎉 下单成功！');
-                        if (window.ClientApp) window.ClientApp.navigateTo('orders');
+
+                        var orderId = orderResult.orderId || 'ORD' + Date.now().toString(36);
+                        PaymentHelper.pay({
+                            orderId: orderId,
+                            total: total,
+                            subject: '宜早鲜订单 #' + orderId
+                        }, function(payResult) {
+                            if (payResult.success) {
+                                Utils.toast('🎉 支付成功！订单已提交');
+                                if (window.ClientApp) window.ClientApp.navigateTo('orders');
+                            } else {
+                                Utils.toast('❌ 支付失败，请重试');
+                            }
+                        });
                     });
                 });
             });
@@ -331,6 +356,13 @@ window.ClientPages = {
         var list = document.getElementById('orderList');
         var empty = document.getElementById('orderEmpty');
         if (!list || !empty) return;
+
+        var user = Auth.getCurrentUser();
+        if (!user) {
+            list.innerHTML = '<div class="empty-state"><p>请先登录查看订单</p></div>';
+            empty.style.display = 'none';
+            return;
+        }
 
         DataService.getOrders().then(function(orders) {
             if (!Array.isArray(orders)) orders = [];
@@ -403,7 +435,12 @@ window.ClientPages = {
 
     renderProfile: function() {
         var user = Auth.getCurrentUser();
-        if (!user) return;
+        if (!user) {
+            document.getElementById('statOrders').textContent = '0';
+            document.getElementById('statCompleted').textContent = '0';
+            document.getElementById('statCart').textContent = '0';
+            return;
+        }
 
         DataService.getOrders().then(function(orders) {
             if (!Array.isArray(orders)) orders = [];
@@ -420,25 +457,19 @@ window.ClientPages = {
             var statOrders = document.getElementById('statOrders');
             var statCompleted = document.getElementById('statCompleted');
             var statCart = document.getElementById('statCart');
-            var profileName = document.getElementById('profileName');
-            var profilePhone = document.getElementById('profilePhone');
 
             if (statOrders) statOrders.textContent = totalOrders;
             if (statCompleted) statCompleted.textContent = completed;
             if (statCart) statCart.textContent = cartCount;
-            if (profileName) profileName.textContent = '用户 ' + user.phone.slice(-4);
-            if (profilePhone) profilePhone.textContent = user.phone;
         });
     },
-
-    // ================================================================
-    // ★★★ 地址管理（拼多多风格：列表+左滑+定位弹窗） ★★★
-    // ================================================================
 
     showAddressManager: function() {
         var user = Auth.getCurrentUser();
         if (!user) {
-            Utils.toast('请先登录');
+            if (confirm('请先登录后再管理地址，是否现在登录？')) {
+                ClientApp.showLoginModal();
+            }
             return;
         }
 
@@ -508,7 +539,6 @@ window.ClientPages = {
         if (existing) {
             existing.innerHTML = html;
             existing.style.display = 'block';
-            // 重新绑定左滑
             this._initSwipe();
             return;
         }
@@ -530,31 +560,24 @@ window.ClientPages = {
         this.renderProfile();
     },
 
-    // ================================================================
-    // ★★★ 左滑交互（拼多多风格） ★★★
-    // ================================================================
     _initSwipe: function() {
         var wrappers = document.querySelectorAll('.address-item-wrapper');
         var threshold = 60;
 
         wrappers.forEach(function(wrapper) {
             var item = wrapper.querySelector('.address-item');
-            var swipe = wrapper.querySelector('.address-item-swipe');
-
-            if (!item || !swipe) return;
+            if (!item) return;
 
             var startX = 0;
             var currentX = 0;
             var isDragging = false;
 
-            // 触摸事件
             wrapper.addEventListener('touchstart', function(e) {
                 var touch = e.touches[0];
                 startX = touch.clientX;
                 currentX = 0;
                 isDragging = true;
 
-                // 关闭其他已展开的
                 document.querySelectorAll('.address-item-wrapper.swipe-open').forEach(function(el) {
                     if (el !== wrapper) {
                         el.classList.remove('swipe-open');
@@ -567,9 +590,7 @@ window.ClientPages = {
                 if (!isDragging) return;
                 var touch = e.touches[0];
                 var diff = touch.clientX - startX;
-                // 只允许左滑（负值），右滑回弹
                 var offset = Math.min(0, diff);
-                // 限制最大左滑距离为150px
                 offset = Math.max(-150, offset);
                 item.style.transform = 'translateX(' + offset + 'px)';
                 currentX = offset;
@@ -588,7 +609,6 @@ window.ClientPages = {
                 currentX = 0;
             }, { passive: true });
 
-            // 鼠标事件（PC调试支持）
             var mouseStartX = 0;
             var mouseDragging = false;
 
@@ -608,10 +628,8 @@ window.ClientPages = {
 
             document.addEventListener('mousemove', function(e) {
                 if (!mouseDragging) return;
-                // 检测是否在wrapper内
                 var rect = wrapper.getBoundingClientRect();
                 if (e.clientX < rect.left || e.clientX > rect.right || e.clientY < rect.top || e.clientY > rect.bottom) {
-                    // 鼠标移出wrapper，回弹
                     wrapper.classList.remove('swipe-open');
                     item.style.transform = 'translateX(0)';
                     mouseDragging = false;
@@ -639,13 +657,12 @@ window.ClientPages = {
         });
     },
 
-    // ================================================================
-    // ★★★ 地址表单 ★★★
-    // ================================================================
     openAddressForm: function(addressId) {
         var user = Auth.getCurrentUser();
         if (!user) {
-            Utils.toast('请先登录');
+            if (confirm('请先登录后再管理地址，是否现在登录？')) {
+                ClientApp.showLoginModal();
+            }
             return;
         }
 
@@ -729,7 +746,6 @@ window.ClientPages = {
         this.showAddressManager();
     },
 
-    // ★★★ 定位填充（调用公共模块 LocationHelper） ★★★
     fillAddressByLocation: function() {
         LocationHelper.pickAddress({
             addressInputId: 'addr_address',

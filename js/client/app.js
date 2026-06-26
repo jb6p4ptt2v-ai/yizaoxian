@@ -1,29 +1,45 @@
 window.ClientApp = {
     currentUser: null,
     currentPage: 'home',
+    _returnPage: null,
+    _returnCallback: null,
 
     init: function(user) {
         this.currentUser = user;
+        var isLoggedIn = !!user;
 
-        // 显示客户端界面
         document.getElementById('authApp').style.display = 'none';
         document.getElementById('clientApp').style.display = 'block';
 
-        // 更新用户信息
-        document.getElementById('clientUserDisplay').textContent = user.phone;
-        document.getElementById('profileName').textContent = '用户 ' + user.phone.slice(-4);
+        var display = document.getElementById('clientUserDisplay');
+        var authBtn = document.getElementById('authBtn');
+        var logoutBtn = document.getElementById('logoutBtn');
 
-        // 管理员入口
-        var adminBtn = document.getElementById('adminEntryBtn');
-        if (adminBtn) {
-            adminBtn.style.display = (user.role === 'admin') ? 'flex' : 'none';
+        if (isLoggedIn) {
+            display.textContent = user.phone || '用户';
+            if (authBtn) { authBtn.textContent = '退出'; authBtn.onclick = function() { Auth.logout(); }; }
+            if (logoutBtn) logoutBtn.style.display = 'block';
+            document.getElementById('profileName').textContent = '用户 ' + (user.phone ? user.phone.slice(-4) : '');
+            document.getElementById('profilePhone').textContent = '新鲜 · 健康 · 农家';
+        } else {
+            display.textContent = '游客';
+            if (authBtn) { authBtn.textContent = '登录'; authBtn.onclick = function() { ClientApp.toggleAuth(); }; }
+            if (logoutBtn) logoutBtn.style.display = 'none';
+            document.getElementById('profileName').textContent = '游客';
+            document.getElementById('profilePhone').textContent = '登录后享受更多服务';
         }
 
-        // 初始化页面
-        ClientPages.init(this);
+        var adminBtn = document.getElementById('adminEntryBtn');
+        if (adminBtn) {
+            adminBtn.style.display = (isLoggedIn && user && user.role === 'admin') ? 'flex' : 'none';
+        }
+
+        if (window.ClientPages) {
+            ClientPages.init(this);
+        }
+
         this.navigateTo('home');
 
-        // 绑定底部导航
         var self = this;
         document.querySelectorAll('.bottom-nav .nav-item').forEach(function(item) {
             item.addEventListener('click', function() {
@@ -32,24 +48,49 @@ window.ClientApp = {
             });
         });
 
-        // 初始化地图
-        if (window.MapService && window.MapService.init) {
-            window.MapService.init();
+        if (window.MapService && window.MapService._loadMap) {
+            window.MapService._loadMap(function() {});
         }
 
-        // 初始化省市区数据
         if (window.RegionData && window.RegionData.init) {
             window.RegionData.init();
         }
 
-        // 更新角标
         this.updateBadges();
+    },
+
+    toggleAuth: function() {
+        var user = Auth.getCurrentUser();
+        if (user) {
+            Auth.logout();
+        } else {
+            this.showLoginModal();
+        }
+    },
+
+    showLoginModal: function() {
+        document.getElementById('clientApp').style.display = 'none';
+        document.getElementById('authApp').style.display = 'block';
+        Auth.showPage('login');
+    },
+
+    requireAuth: function(callback) {
+        var user = Auth.getCurrentUser();
+        if (user) {
+            if (typeof callback === 'function') callback();
+            return true;
+        }
+
+        if (confirm('请先登录后再进行操作，是否现在登录？')) {
+            this._returnCallback = callback;
+            this.showLoginModal();
+        }
+        return false;
     },
 
     navigateTo: function(page) {
         this.currentPage = page;
 
-        // 隐藏所有页面
         document.querySelectorAll('#clientApp .page').forEach(function(el) {
             el.classList.remove('active');
         });
@@ -57,17 +98,15 @@ window.ClientApp = {
         var target = document.getElementById('page-' + page);
         if (target) target.classList.add('active');
 
-        // 导航高亮
         document.querySelectorAll('.bottom-nav .nav-item').forEach(function(el) {
             el.classList.toggle('active', el.dataset.page === page);
         });
 
-        // 渲染对应页面
         switch(page) {
-            case 'home': ClientPages.renderProducts(); break;
-            case 'cart': ClientPages.renderCart(); break;
-            case 'orders': ClientPages.renderOrders(); break;
-            case 'profile': ClientPages.renderProfile(); break;
+            case 'home': if (ClientPages) ClientPages.renderProducts(); break;
+            case 'cart': if (ClientPages) ClientPages.renderCart(); break;
+            case 'orders': if (ClientPages) ClientPages.renderOrders(); break;
+            case 'profile': if (ClientPages) ClientPages.renderProfile(); break;
             default: break;
         }
 
@@ -96,5 +135,27 @@ window.ClientApp = {
         } catch(e) {
             console.warn('更新角标失败:', e.message);
         }
+    },
+
+    isLoggedIn: function() {
+        return !!Auth.getCurrentUser();
+    },
+
+    getCurrentUser: function() {
+        return Auth.getCurrentUser();
     }
 };
+
+document.addEventListener('DOMContentLoaded', function() {
+    var origHandleLogin = Auth.handleLogin;
+    Auth.handleLogin = function() {
+        origHandleLogin.call(Auth);
+        var cb = ClientApp._returnCallback;
+        if (cb) {
+            ClientApp._returnCallback = null;
+            setTimeout(function() {
+                if (typeof cb === 'function') cb();
+            }, 500);
+        }
+    };
+});

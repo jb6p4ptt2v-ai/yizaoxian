@@ -25,9 +25,6 @@ window.AdminPages = {
         return perms.indexOf(perm) !== -1;
     },
 
-    // ================================================================
-    // 概览
-    // ================================================================
     renderDashboard: function() {
         if (!this._hasPermission('dashboard')) {
             var el = document.getElementById('admin-dashboard');
@@ -76,9 +73,6 @@ window.AdminPages = {
         });
     },
 
-    // ================================================================
-    // 供应商管理
-    // ================================================================
     renderSuppliers: function() {
         if (!this._hasPermission('suppliers')) {
             var el = document.getElementById('admin-suppliers');
@@ -163,10 +157,6 @@ window.AdminPages = {
     },
 
     fillSupplierAddress: function() {
-        if (typeof LocationHelper === 'undefined') {
-            Utils.toast('❌ 定位服务未加载，请刷新页面');
-            return;
-        }
         LocationHelper.pickAddress({
             addressInputId: 'f_sup_address',
             regionData: window.RegionData,
@@ -295,9 +285,6 @@ window.AdminPages = {
         });
     },
 
-    // ================================================================
-    // 商品管理
-    // ================================================================
     renderProducts: function() {
         if (!this._hasPermission('products')) {
             var el = document.getElementById('admin-products');
@@ -339,30 +326,131 @@ window.AdminPages = {
             Utils.toast('您没有权限操作商品');
             return;
         }
-        var name = prompt('商品名称：');
-        if (!name) return;
-        var price = parseFloat(prompt('价格：'));
-        if (isNaN(price)) return;
-        var stock = parseInt(prompt('库存：')) || 0;
+
+        var self = this;
+        var promise = id ? DataService.getProducts().then(function(list) {
+            if (!Array.isArray(list)) list = [];
+            return list.find(function(p) { return p && p.id === id; });
+        }) : Promise.resolve(null);
+
+        promise.then(function(data) {
+            var isEdit = !!data;
+            var html = '<div class="modal-title">' + (isEdit ? '编辑商品' : '添加商品') + '</div>';
+
+            html += '<div class="form-group"><label>商品名称 *</label><input id="f_prod_name" value="' + (data ? data.name : '') + '" placeholder="如：有机小白菜"></div>';
+
+            var categories = ['蔬菜', '水果', '肉禽', '水产', '粮油', '干货'];
+            var catOptions = categories.map(function(c) {
+                var selected = (data && data.category === c) ? 'selected' : '';
+                return '<option value="' + c + '" ' + selected + '>' + c + '</option>';
+            }).join('');
+            html += '<div class="form-group"><label>分类</label><select id="f_prod_category">' +
+                '<option value="">请选择分类</option>' + catOptions + '</select></div>';
+
+            html += '<div class="form-group"><label>价格 *（元）</label><input id="f_prod_price" type="number" step="0.01" value="' + (data ? data.price : '') + '" placeholder="0.00"></div>';
+
+            var units = ['份', '斤', '个', '盒', '袋', '箱'];
+            var unitOptions = units.map(function(u) {
+                var selected = (data && data.unit === u) ? 'selected' : '';
+                return '<option value="' + u + '" ' + selected + '>' + u + '</option>';
+            }).join('');
+            html += '<div class="form-group"><label>单位</label><select id="f_prod_unit">' +
+                '<option value="份" ' + (data && data.unit === '份' ? 'selected' : '') + '>份</option>' + unitOptions + '</select></div>';
+
+            html += '<div class="form-group"><label>库存</label><input id="f_prod_stock" type="number" value="' + (data ? data.stock : '0') + '" placeholder="0"></div>';
+
+            html += '<div class="form-group"><label>供应商</label><select id="f_prod_supplier"><option value="">请选择供应商</option></select></div>';
+
+            html += '<div class="form-group"><label>Emoji（商品图标）</label><input id="f_prod_emoji" value="' + (data ? data.emoji || '🥬' : '🥬') + '" placeholder="🥬"></div>';
+
+            html += '<div class="form-group"><label>描述</label><textarea id="f_prod_desc" placeholder="商品简短描述">' + (data ? data.description || '' : '') + '</textarea></div>';
+
+            html += '<div class="form-actions"><button class="btn-cancel" onclick="window.closeModal()">取消</button><button class="btn-submit" onclick="AdminPages.saveProduct(\'' + (id || '') + '\')">保存</button></div>';
+
+            var content = document.getElementById('modalContent');
+            if (content) content.innerHTML = html;
+
+            var overlay = document.getElementById('modalOverlay');
+            if (overlay) overlay.classList.add('active');
+
+            DataService.getSuppliers().then(function(suppliers) {
+                var sel = document.getElementById('f_prod_supplier');
+                if (!sel) return;
+                if (!Array.isArray(suppliers)) suppliers = [];
+                suppliers.forEach(function(s) {
+                    var opt = document.createElement('option');
+                    opt.value = s.id || '';
+                    opt.textContent = s.name || '';
+                    if (data && data.supplier_id === s.id) {
+                        opt.selected = true;
+                    }
+                    sel.appendChild(opt);
+                });
+            });
+        });
+    },
+
+    saveProduct: function(id) {
+        if (!this._hasPermission('products')) {
+            Utils.toast('您没有权限操作商品');
+            return;
+        }
+
+        var nameInput = document.getElementById('f_prod_name');
+        var priceInput = document.getElementById('f_prod_price');
+        var stockInput = document.getElementById('f_prod_stock');
+        var categoryInput = document.getElementById('f_prod_category');
+        var unitInput = document.getElementById('f_prod_unit');
+        var supplierInput = document.getElementById('f_prod_supplier');
+        var emojiInput = document.getElementById('f_prod_emoji');
+        var descInput = document.getElementById('f_prod_desc');
+
+        if (!nameInput) {
+            Utils.toast('表单加载异常，请刷新重试');
+            return;
+        }
+
+        var name = nameInput.value.trim();
+        var price = parseFloat(priceInput.value);
+        var stock = parseInt(stockInput.value) || 0;
+        var category = categoryInput ? categoryInput.value : '';
+        var unit = unitInput ? unitInput.value : '份';
+        var supplierId = supplierInput ? supplierInput.value : null;
+        var emoji = emojiInput ? emojiInput.value.trim() || '🥬' : '🥬';
+        var description = descInput ? descInput.value.trim() : '';
+
+        if (!name) {
+            Utils.toast('请输入商品名称');
+            return;
+        }
+        if (isNaN(price) || price < 0) {
+            Utils.toast('请输入有效的价格');
+            return;
+        }
+
         var data = {
             name: name,
             price: price,
             stock: stock,
-            category: prompt('分类：') || '',
-            unit: prompt('单位：') || '份',
-            emoji: prompt('Emoji：') || '🥬'
+            category: category,
+            unit: unit,
+            supplierId: supplierId,
+            emoji: emoji,
+            description: description
         };
         if (id) data.id = id;
+
         DataService.saveProduct(data)
             .then(function() {
                 Utils.toast('✅ 商品已保存');
+                window.closeModal();
                 AdminPages.render('products');
             })
             .catch(function(err) {
                 Utils.toast('保存失败: ' + err.message);
             });
     },
-    saveProduct: function(id) { this.openProductModal(id); },
+
     deleteProduct: function(id) {
         if (!confirm('确定删除该商品吗？')) return;
         DataService.deleteProduct(id)
@@ -375,9 +463,6 @@ window.AdminPages = {
             });
     },
 
-    // ================================================================
-    // 库存管理
-    // ================================================================
     renderInventory: function() {
         if (!this._hasPermission('inventory')) {
             var el = document.getElementById('admin-inventory');
@@ -459,9 +544,6 @@ window.AdminPages = {
     },
     saveInventory: function(type) { this.openInventoryModal(type); },
 
-    // ================================================================
-    // ★★★ 订单管理 ★★★
-    // ================================================================
     renderOrders: function() {
         var el = document.getElementById('admin-orders');
         if (!el) return;
@@ -507,9 +589,6 @@ window.AdminPages = {
             });
     },
 
-    // ================================================================
-    // ★★★ 财务管理 ★★★
-    // ================================================================
     renderFinance: function() {
         var el = document.getElementById('admin-finance');
         if (!el) return;
@@ -576,9 +655,6 @@ window.AdminPages = {
             });
     },
 
-    // ================================================================
-    // ★★★ 备份管理 ★★★
-    // ================================================================
     renderBackup: function() {
         var el = document.getElementById('admin-backup');
         if (!el) return;
@@ -597,9 +673,6 @@ window.AdminPages = {
             '</div>';
     },
 
-    // ================================================================
-    // ★★★ 个人中心 ★★★
-    // ================================================================
     renderProfile: function() {
         var el = document.getElementById('admin-profile');
         if (!el) return;
@@ -642,9 +715,6 @@ window.AdminPages = {
             });
     },
 
-    // ================================================================
-    // ★★★ 成员管理 ★★★
-    // ================================================================
     renderMembers: function() {
         var el = document.getElementById('admin-members');
         if (!el) return;

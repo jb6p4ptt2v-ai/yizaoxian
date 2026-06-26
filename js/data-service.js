@@ -3,12 +3,10 @@
  * 数据存储在 D1 数据库
  */
 window.DataService = {
-    // ===== 动态获取 API 地址，始终从 CONFIG 读取 =====
     _getApiBase: function() {
         return (window.CONFIG && window.CONFIG.API_BASE) || 'https://yizaoxian-api.xiaofanzhouapple.workers.dev';
     },
 
-    // ===== 通用请求方法 =====
     _request: function(endpoint, method, data) {
         var url = this._getApiBase() + endpoint;
         var options = {
@@ -33,9 +31,6 @@ window.DataService = {
             });
     },
 
-    // ================================================================
-    // 用户相关
-    // ================================================================
     login: function(phone, password) {
         return this._request('/users/login', 'POST', { phone: phone, password: password });
     },
@@ -77,9 +72,6 @@ window.DataService = {
         return this._request('/users', 'GET');
     },
 
-    // ================================================================
-    // 地址相关
-    // ================================================================
     getAddresses: function(userId) {
         return this._request('/users/addresses?userId=' + userId, 'GET');
     },
@@ -92,9 +84,6 @@ window.DataService = {
         return this._request('/users/addresses?id=' + id + '&userId=' + userId, 'DELETE');
     },
 
-    // ================================================================
-    // 供应商相关
-    // ================================================================
     getSuppliers: function() {
         return this._request('/suppliers', 'GET');
     },
@@ -107,9 +96,6 @@ window.DataService = {
         return this._request('/suppliers?id=' + id, 'DELETE');
     },
 
-    // ================================================================
-    // 商品相关
-    // ================================================================
     getProducts: function() {
         return this._request('/products', 'GET');
     },
@@ -122,9 +108,6 @@ window.DataService = {
         return this._request('/products?id=' + id, 'DELETE');
     },
 
-    // ================================================================
-    // 订单相关
-    // ================================================================
     getOrders: function() {
         return this._request('/orders', 'GET');
     },
@@ -137,9 +120,6 @@ window.DataService = {
         return this._request('/orders/status', 'PUT', { orderId: orderId, status: status });
     },
 
-    // ================================================================
-    // 库存相关
-    // ================================================================
     getInventory: function() {
         return this._request('/inventory', 'GET');
     },
@@ -148,9 +128,6 @@ window.DataService = {
         return this._request('/inventory', 'POST', inventoryData);
     },
 
-    // ================================================================
-    // 财务相关
-    // ================================================================
     getFinance: function() {
         return this._request('/finance', 'GET');
     },
@@ -163,9 +140,6 @@ window.DataService = {
         return this._request('/finance?id=' + id, 'DELETE');
     },
 
-    // ================================================================
-    // 备份相关
-    // ================================================================
     exportBackup: function() {
         return this._request('/backup/export', 'GET');
     },
@@ -174,9 +148,6 @@ window.DataService = {
         return this._request('/backup/import', 'POST', { data: data });
     },
 
-    // ================================================================
-    // 管理员相关
-    // ================================================================
     adminLogin: function(username, password) {
         return this._request('/admin/login', 'POST', { username: username, password: password });
     },
@@ -201,9 +172,16 @@ window.DataService = {
         return this._request('/admin/change-password', 'POST', { id: id, oldPassword: oldPassword, newPassword: newPassword });
     },
 
-    // ================================================================
-    // 购物车（localStorage）
-    // ================================================================
+    // ★★★ 支付确认（银联预留） ★★★
+    paymentConfirm: function(orderId, transactionId, paymentData) {
+        return this._request('/payment/confirm', 'POST', {
+            orderId: orderId,
+            transactionId: transactionId,
+            paymentData: paymentData || {},
+            timestamp: new Date().toISOString()
+        });
+    },
+
     getCart: function() {
         try {
             var raw = localStorage.getItem('yizaoxian_cart');
@@ -215,9 +193,6 @@ window.DataService = {
         localStorage.setItem('yizaoxian_cart', JSON.stringify(cart));
     },
 
-    // ================================================================
-    // 兼容旧版（供 dashboard 使用）
-    // ================================================================
     getAppData: function() {
         var self = this;
         return Promise.all([
