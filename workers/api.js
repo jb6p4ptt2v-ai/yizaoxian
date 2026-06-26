@@ -141,7 +141,7 @@ export default {
             }
 
             // ============================================================
-            // 地址管理
+            // 地址管理（已支持 last_used 字段）
             // ============================================================
             if (path === '/users/addresses' && method === 'GET') {
                 const userId = url.searchParams.get('userId');
@@ -160,23 +160,40 @@ export default {
             if (path === '/users/addresses' && method === 'POST') {
                 const body = await request.json();
                 const { userId, id, name, phone, address, tag, lng, lat, province, city, district, street, isDefault, lastUsed } = body;
+
                 if (isDefault) {
                     await env.DB.prepare('UPDATE addresses SET is_default = 0 WHERE user_id = ?').bind(userId).run();
                 }
+
                 if (id) {
+                    // 更新地址（包含 last_used）
                     await env.DB.prepare(
                         `UPDATE addresses SET name = ?, phone = ?, address = ?, tag = ?, lng = ?, lat = ?,
                          province = ?, city = ?, district = ?, street = ?, is_default = ?,
                          last_used = ? WHERE id = ? AND user_id = ?`
-                    ).bind(name, phone, address, tag || '', lng || null, lat || null, province || '', city || '', district || '', street || '', isDefault ? 1 : 0, lastUsed ? 1 : 0, id, userId).run();
+                    ).bind(
+                        name, phone, address, tag || '', lng || null, lat || null,
+                        province || '', city || '', district || '', street || '',
+                        isDefault ? 1 : 0,
+                        lastUsed ? 1 : 0,
+                        id, userId
+                    ).run();
                 } else {
+                    // 新增地址（包含 last_used）
                     const newId = 'addr_' + Date.now().toString(36);
                     await env.DB.prepare(
                         `INSERT INTO addresses (id, user_id, name, phone, address, tag, lng, lat,
                          province, city, district, street, is_default, last_used, created_at)
                          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
-                    ).bind(newId, userId, name, phone, address, tag || '', lng || null, lat || null, province || '', city || '', district || '', street || '', isDefault ? 1 : 0, lastUsed ? 1 : 0, new Date().toISOString()).run();
+                    ).bind(
+                        newId, userId, name, phone, address, tag || '', lng || null, lat || null,
+                        province || '', city || '', district || '', street || '',
+                        isDefault ? 1 : 0,
+                        lastUsed ? 1 : 0,
+                        new Date().toISOString()
+                    ).run();
                 }
+
                 const result = await env.DB.prepare('SELECT * FROM addresses WHERE user_id = ? ORDER BY is_default DESC, created_at DESC').bind(userId).all();
                 return new Response(JSON.stringify({ success: true, addresses: result.results }), {
                     headers: { ...corsHeaders, 'Content-Type': 'application/json' }
@@ -199,7 +216,7 @@ export default {
             }
 
             // ============================================================
-            // 供应商管理
+            // 供应商管理（已支持省市区字段）
             // ============================================================
             if (path === '/suppliers' && method === 'GET') {
                 const result = await env.DB.prepare('SELECT * FROM suppliers ORDER BY created_at DESC').all();
@@ -477,9 +494,9 @@ export default {
                 }
                 for (const sup of data.suppliers || []) {
                     await env.DB.prepare(
-                        `INSERT INTO suppliers (id, name, contact, phone, address, created_at)
-                         VALUES (?, ?, ?, ?, ?, ?)`
-                    ).bind(sup.id, sup.name, sup.contact || '', sup.phone || '', sup.address || '', sup.created_at).run();
+                        `INSERT INTO suppliers (id, name, contact, phone, address, lng, lat, province, city, district, created_at)
+                         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+                    ).bind(sup.id, sup.name, sup.contact || '', sup.phone || '', sup.address || '', sup.lng || null, sup.lat || null, sup.province || '', sup.city || '', sup.district || '', sup.created_at).run();
                 }
                 for (const p of data.products || []) {
                     await env.DB.prepare(
