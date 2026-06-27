@@ -1,7 +1,3 @@
-/**
- * 宜早鲜 - 前台客户端页面逻辑（完整版 v4.0）
- * 包含：商品展示、搜索、购物车、订单、评价、收藏、优惠券、消息、售后
- */
 window.ClientPages = {
     app: null,
     currentCategory: '全部',
@@ -14,23 +10,15 @@ window.ClientPages = {
     _searchKeyword: '',
     _searchSort: 'relevance',
 
-    // ================================================================
-    // 初始化
-    // ================================================================
     init: function(app) {
         this.app = app;
         if (window.RegionData && window.RegionData.init) {
             window.RegionData.init();
         }
-        // 加载热搜词
         this.loadHotWords();
-        // 加载消息未读数
         this.loadUnreadCount();
     },
 
-    // ================================================================
-    // 商品展示（含热卖榜单、已售、今日可提）
-    // ================================================================
     renderProducts: function() {
         var self = this;
         var grid = document.getElementById('productGrid');
@@ -72,7 +60,6 @@ window.ClientPages = {
             var cart = DataService.getCart();
             if (!cart) cart = {};
 
-            // 热卖榜单
             var hotHtml = '';
             if (self._hotProducts.length > 0) {
                 hotHtml = '<div class="hot-banner"><div class="hot-title">🔥 热卖榜单</div><div class="hot-list">';
@@ -121,9 +108,6 @@ window.ClientPages = {
         });
     },
 
-    // ================================================================
-    // 分类筛选
-    // ================================================================
     filterByCategory: function(cat) {
         this.currentCategory = cat;
         document.querySelectorAll('#clientApp .category-tabs .cat-tab').forEach(function(t) {
@@ -132,9 +116,6 @@ window.ClientPages = {
         this.renderProducts();
     },
 
-    // ================================================================
-    // 搜索（含历史、热搜、排序）
-    // ================================================================
     filterProducts: function() {
         this.renderProducts();
     },
@@ -146,7 +127,6 @@ window.ClientPages = {
             this.renderProducts();
             return;
         }
-        // 保存搜索历史
         var user = Auth.getCurrentUser();
         if (user && user.id) {
             DataService.saveSearchHistory(user.id, keyword).catch(function() {});
@@ -189,9 +169,6 @@ window.ClientPages = {
         }).catch(function() {});
     },
 
-    // ================================================================
-    // 购物车
-    // ================================================================
     addToCart: function(productId) {
         DataService.getProducts().then(function(products) {
             if (!Array.isArray(products)) products = [];
@@ -285,7 +262,6 @@ window.ClientPages = {
             footer.classList.remove('hidden');
 
             var html = '';
-            // 失效商品
             if (invalidItems.length > 0) {
                 html += '<div style="background:#fff5f5;border-radius:8px;padding:8px 12px;margin-bottom:8px;border:1px solid #ffd0d0;">';
                 html += '<div style="font-size:12px;color:#ff3b30;font-weight:500;margin-bottom:4px;">⚠️ 以下商品已失效，请移除</div>';
@@ -298,7 +274,6 @@ window.ClientPages = {
                 html += '</div>';
             }
 
-            // 有效商品
             items.forEach(function(item) {
                 var maxQty = Math.min(item.stock, 99);
                 html += '<div class="cart-item">' +
@@ -311,7 +286,6 @@ window.ClientPages = {
                     '</div></div>';
             });
 
-            // 全选/批量删除
             html += '<div style="display:flex;justify-content:space-between;padding:8px 0;font-size:13px;">' +
                 '<label style="display:flex;align-items:center;gap:6px;cursor:pointer;">' +
                 '<input type="checkbox" id="cartSelectAll" checked onchange="ClientPages.toggleCartAll()"> 全选' +
@@ -331,9 +305,7 @@ window.ClientPages = {
         });
     },
 
-    toggleCartAll: function() {
-        // 可选的批量全选逻辑，简化为全选/取消全选
-    },
+    toggleCartAll: function() {},
 
     batchRemoveCart: function() {
         if (!confirm('确定移除所有商品吗？')) return;
@@ -343,9 +315,6 @@ window.ClientPages = {
         Utils.toast('已清空购物车');
     },
 
-    // ================================================================
-    // 结算（修复递归）
-    // ================================================================
     showCheckout: function() {
         var self = this;
         if (!Auth.getCurrentUser()) {
@@ -375,7 +344,6 @@ window.ClientPages = {
             return;
         }
 
-        // 检查截单时间
         if (OrderHelper.isPastCutoff()) {
             Utils.toast('⏰ 已过截单时间（23:00），请明日再下单');
             return;
@@ -515,10 +483,9 @@ window.ClientPages = {
                         }, function(payResult) {
                             if (payResult.success) {
                                 Utils.toast('🎉 支付成功！提货码：' + builtOrder.pickupCode);
-                                // 发送评价提醒
                                 setTimeout(function() {
                                     if (confirm('订单已支付成功！是否现在评价商品？')) {
-                                        window.ClientPages.showOrderDetail(orderId);
+                                        window.ClientPages.showReviewForm(orderId);
                                     }
                                 }, 1000);
                                 if (window.ClientApp) window.ClientApp.navigateTo('orders');
@@ -532,9 +499,6 @@ window.ClientPages = {
         });
     },
 
-    // ================================================================
-    // 订单列表
-    // ================================================================
     renderOrders: function() {
         var list = document.getElementById('orderList');
         var empty = document.getElementById('orderEmpty');
@@ -599,9 +563,6 @@ window.ClientPages = {
         });
     },
 
-    // ================================================================
-    // 订单详情
-    // ================================================================
     showOrderDetail: function(orderId) {
         DataService.getOrderDetail(orderId).then(function(order) {
             if (!order) {
@@ -668,9 +629,6 @@ window.ClientPages = {
         });
     },
 
-    // ================================================================
-    // 订单操作
-    // ================================================================
     cancelOrder: function(id) {
         if (!confirm('确定要取消该订单吗？')) return;
         DataService.updateOrderStatus(id, 'cancelled').then(function() {
@@ -685,7 +643,6 @@ window.ClientPages = {
         DataService.updateOrderStatus(id, 'completed').then(function() {
             window.ClientPages.renderOrders();
             Utils.toast('🎉 已确认收货！');
-            // 提示评价
             setTimeout(function() {
                 if (confirm('确认收货成功！是否现在评价商品？')) {
                     window.ClientPages.showReviewForm(id);
@@ -698,6 +655,7 @@ window.ClientPages = {
 
     deleteOrder: function(id) {
         if (!confirm('确定删除该订单吗？此操作不可恢复。')) return;
+        // 注意：后端需要支持 DELETE 操作
         DataService.deleteOrder(id).then(function() {
             window.ClientPages.renderOrders();
             Utils.toast('订单已删除');
@@ -714,7 +672,6 @@ window.ClientPages = {
         }
         DataService.reorder(orderId, user.id).then(function(result) {
             if (result.success && result.cart) {
-                // 将商品加入购物车
                 var cart = DataService.getCart();
                 if (!cart) cart = {};
                 for (var pid in result.cart) {
@@ -740,9 +697,6 @@ window.ClientPages = {
         this.renderOrders();
     },
 
-    // ================================================================
-    // 评价模块
-    // ================================================================
     showReviewForm: function(orderId) {
         var user = Auth.getCurrentUser();
         if (!user) {
@@ -756,44 +710,49 @@ window.ClientPages = {
                 return;
             }
 
-            var product = order.items[0]; // 评价当前订单的第一个商品
-            var html = '<div class="modal-title">✍️ 评价商品</div>' +
-                '<div style="text-align:center;font-size:36px;padding:8px 0;">' + (product.emoji || '🥬') + '</div>' +
-                '<div style="text-align:center;font-weight:500;">' + product.name + '</div>' +
-                '<div style="margin:12px 0;">' +
-                '<label style="display:block;font-size:13px;color:#666;margin-bottom:4px;">评分</label>' +
-                '<div style="display:flex;gap:8px;font-size:28px;" id="ratingStars">' +
-                '<span onclick="ClientPages._setRating(1)" style="cursor:pointer;">☆</span>' +
-                '<span onclick="ClientPages._setRating(2)" style="cursor:pointer;">☆</span>' +
-                '<span onclick="ClientPages._setRating(3)" style="cursor:pointer;">☆</span>' +
-                '<span onclick="ClientPages._setRating(4)" style="cursor:pointer;">☆</span>' +
-                '<span onclick="ClientPages._setRating(5)" style="cursor:pointer;">☆</span>' +
-                '</div>' +
-                '<input type="hidden" id="reviewRating" value="5">' +
-                '</div>' +
-                '<div style="margin:12px 0;">' +
-                '<label style="display:block;font-size:13px;color:#666;margin-bottom:4px;">评价内容</label>' +
-                '<textarea id="reviewContent" rows="4" placeholder="说说您的使用感受..." style="width:100%;padding:8px;border:1px solid #ddd;border-radius:6px;font-size:14px;"></textarea>' +
-                '</div>' +
-                '<div style="margin:12px 0;">' +
-                '<label style="display:block;font-size:13px;color:#666;margin-bottom:4px;">标签（点击选择）</label>' +
-                '<div style="display:flex;gap:6px;flex-wrap:wrap;" id="reviewTags">' +
-                '["新鲜","好吃","份量足","性价比高","包装好","送货快","会回购"].forEach(function(tag) {' +
-                'html += \'<span class="review-tag" onclick="ClientPages._toggleReviewTag(this)" style="padding:4px 12px;border:1px solid #ddd;border-radius:14px;font-size:12px;cursor:pointer;">\' + tag + \'</span>\';' +
-                '});' +
-                '</div>' +
-                '</div>' +
-                '<div class="form-actions">' +
-                '<button class="btn-cancel" onclick="window.closeModal()">取消</button>' +
-                '<button class="btn-submit" onclick="ClientPages._submitReview(\'' + orderId + '\',\'' + product.productId + '\')">提交评价</button>' +
-                '</div>';
+            var product = order.items[0];
+
+            var html = '<div class="modal-title">✍️ 评价商品</div>';
+            html += '<div style="text-align:center;font-size:36px;padding:8px 0;">' + (product.emoji || '🥬') + '</div>';
+            html += '<div style="text-align:center;font-weight:500;">' + product.name + '</div>';
+            html += '<div style="margin:12px 0;">';
+            html += '<label style="display:block;font-size:13px;color:#666;margin-bottom:4px;">评分</label>';
+            html += '<div style="display:flex;gap:8px;font-size:28px;" id="ratingStars">';
+            html += '<span onclick="ClientPages._setRating(1)" style="cursor:pointer;">☆</span>';
+            html += '<span onclick="ClientPages._setRating(2)" style="cursor:pointer;">☆</span>';
+            html += '<span onclick="ClientPages._setRating(3)" style="cursor:pointer;">☆</span>';
+            html += '<span onclick="ClientPages._setRating(4)" style="cursor:pointer;">☆</span>';
+            html += '<span onclick="ClientPages._setRating(5)" style="cursor:pointer;">☆</span>';
+            html += '</div>';
+            html += '<input type="hidden" id="reviewRating" value="5">';
+            html += '</div>';
+
+            html += '<div style="margin:12px 0;">';
+            html += '<label style="display:block;font-size:13px;color:#666;margin-bottom:4px;">评价内容</label>';
+            html += '<textarea id="reviewContent" rows="4" placeholder="说说您的使用感受..." style="width:100%;padding:8px;border:1px solid #ddd;border-radius:6px;font-size:14px;"></textarea>';
+            html += '</div>';
+
+            html += '<div style="margin:12px 0;">';
+            html += '<label style="display:block;font-size:13px;color:#666;margin-bottom:4px;">标签（点击选择）</label>';
+            html += '<div style="display:flex;gap:6px;flex-wrap:wrap;" id="reviewTags">';
+            // 在这里直接生成标签HTML
+            var tags = ['新鲜', '好吃', '份量足', '性价比高', '包装好', '送货快', '会回购'];
+            tags.forEach(function(tag) {
+                html += '<span class="review-tag" onclick="ClientPages._toggleReviewTag(this)" style="padding:4px 12px;border:1px solid #ddd;border-radius:14px;font-size:12px;cursor:pointer;">' + tag + '</span>';
+            });
+            html += '</div>';
+            html += '</div>';
+
+            html += '<div class="form-actions">';
+            html += '<button class="btn-cancel" onclick="window.closeModal()">取消</button>';
+            html += '<button class="btn-submit" onclick="ClientPages._submitReview(\'' + orderId + '\',\'' + product.productId + '\')">提交评价</button>';
+            html += '</div>';
 
             var content = document.getElementById('modalContent');
             if (content) content.innerHTML = html;
             var overlay = document.getElementById('modalOverlay');
             if (overlay) overlay.classList.add('active');
 
-            // 默认5星
             ClientPages._setRating(5);
         }).catch(function(err) {
             Utils.toast('加载订单信息失败: ' + err.message);
@@ -803,7 +762,6 @@ window.ClientPages = {
     _setRating: function(rating) {
         document.getElementById('reviewRating').value = rating;
         var stars = document.querySelectorAll('#ratingStars span');
-        var starChars = ['☆', '☆', '☆', '☆', '☆'];
         for (var i = 0; i < 5; i++) {
             stars[i].textContent = i < rating ? '★' : '☆';
             stars[i].style.color = i < rating ? '#ff6b00' : '#ccc';
@@ -849,9 +807,6 @@ window.ClientPages = {
         });
     },
 
-    // ================================================================
-    // 商品详情弹窗（含评价、收藏、规格）
-    // ================================================================
     showProductDetail: function(productId) {
         var self = this;
         DataService.getProducts().then(function(products) {
@@ -866,7 +821,6 @@ window.ClientPages = {
             var user = Auth.getCurrentUser();
             var isFavorited = false;
 
-            // 检查收藏状态
             if (user && user.id) {
                 DataService.getFavorites(user.id).then(function(favorites) {
                     if (Array.isArray(favorites)) {
@@ -907,7 +861,6 @@ window.ClientPages = {
             (reviewCount > 0 ? '<div style="padding:4px 0;border-top:1px solid #f0f0f0;margin-top:4px;">⭐ 好评率 ' + (avgRating * 20).toFixed(0) + '%（' + reviewCount + '条评价）</div>' : '') +
             (inCart > 0 ? '<div style="padding:4px 0;color:var(--primary);">🛒 已选 ' + inCart + ' 份</div>' : '') +
 
-            // 评价列表（最新3条）
             '<div id="productReviewsPreview" style="margin-top:8px;max-height:150px;overflow-y:auto;border-top:1px solid #f0f0f0;padding-top:8px;"></div>' +
 
             '<div class="form-actions" style="margin-top:12px;">' +
@@ -922,7 +875,6 @@ window.ClientPages = {
         var overlay = document.getElementById('modalOverlay');
         if (overlay) overlay.classList.add('active');
 
-        // 加载评价预览
         DataService.getProductReviews(product.id, 'latest', null, 1, 3).then(function(result) {
             var container = document.getElementById('productReviewsPreview');
             if (!container) return;
@@ -945,9 +897,6 @@ window.ClientPages = {
         }).catch(function() {});
     },
 
-    // ================================================================
-    // 收藏
-    // ================================================================
     toggleFavorite: function(productId, btn) {
         var user = Auth.getCurrentUser();
         if (!user) {
@@ -999,9 +948,6 @@ window.ClientPages = {
         });
     },
 
-    // ================================================================
-    // 优惠券
-    // ================================================================
     renderCoupons: function() {
         var user = Auth.getCurrentUser();
         DataService.getCoupons(user ? user.id : null).then(function(result) {
@@ -1059,9 +1005,6 @@ window.ClientPages = {
         });
     },
 
-    // ================================================================
-    // 消息
-    // ================================================================
     renderMessages: function() {
         var user = Auth.getCurrentUser();
         if (!user) {
@@ -1108,9 +1051,6 @@ window.ClientPages = {
         }).catch(function() {});
     },
 
-    // ================================================================
-    // 售后
-    // ================================================================
     showAfterSaleForm: function(orderId) {
         var user = Auth.getCurrentUser();
         if (!user) {
@@ -1168,9 +1108,6 @@ window.ClientPages = {
         });
     },
 
-    // ================================================================
-    // 个人中心
-    // ================================================================
     renderProfile: function() {
         var user = Auth.getCurrentUser();
         if (!user) {
@@ -1200,14 +1137,10 @@ window.ClientPages = {
             if (statCompleted) statCompleted.textContent = completed;
             if (statCart) statCart.textContent = cartCount;
 
-            // 加载消息未读
             this.loadUnreadCount();
         }.bind(this));
     },
 
-    // ================================================================
-    // 地址管理
-    // ================================================================
     showAddressManager: function() {
         var user = Auth.getCurrentUser();
         if (!user) {
