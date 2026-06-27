@@ -1,14 +1,72 @@
 window.RegionData = {
     _data: null,
     _initialized: false,
+    _loading: false,
 
     init: function() {
         if (this._initialized) return;
-        this._data = this._buildData();
-        this._initialized = true;
+        this._loadData();
     },
 
-    _buildData: function() {
+    _loadData: function() {
+        if (this._loading) return;
+        this._loading = true;
+        // 尝试从数据库动态加载
+        if (typeof DataService !== 'undefined' && DataService.getRegions) {
+            DataService.getRegions('', 1).then(function(provinces) {
+                if (provinces && provinces.length > 0) {
+                    this._data = {};
+                    provinces.forEach(function(p) {
+                        this._data[p.name] = {};
+                    }.bind(this));
+                    // 加载城市
+                    var promises = provinces.map(function(p) {
+                        return DataService.getRegions(p.id, 2).then(function(cities) {
+                            if (cities && cities.length > 0) {
+                                this._data[p.name] = {};
+                                cities.forEach(function(c) {
+                                    this._data[p.name][c.name] = [];
+                                }.bind(this));
+                                // 加载区县
+                                var districtPromises = cities.map(function(c) {
+                                    return DataService.getRegions(c.id, 3).then(function(districts) {
+                                        if (districts && districts.length > 0) {
+                                            this._data[p.name][c.name] = districts.map(function(d) { return d.name; });
+                                        }
+                                    }.bind(this));
+                                }.bind(this));
+                                return Promise.all(districtPromises);
+                            }
+                            return Promise.resolve();
+                        }.bind(this));
+                    }.bind(this));
+                    Promise.all(promises).then(function() {
+                        this._initialized = true;
+                        this._loading = false;
+                        console.log('✅ RegionData 从数据库加载完成');
+                    }.bind(this)).catch(function() {
+                        this._fallbackData();
+                    }.bind(this));
+                } else {
+                    this._fallbackData();
+                }
+            }.bind(this)).catch(function() {
+                this._fallbackData();
+            }.bind(this));
+        } else {
+            this._fallbackData();
+        }
+    },
+
+    _fallbackData: function() {
+        // 如果数据库加载失败，使用内置数据（仅常用省份）
+        this._data = this._buildFallbackData();
+        this._initialized = true;
+        this._loading = false;
+        console.log('⚠️ RegionData 使用内置数据');
+    },
+
+    _buildFallbackData: function() {
         return {
             '北京市': { '北京市': ['东城区', '西城区', '朝阳区', '海淀区', '丰台区', '石景山区', '通州区', '大兴区', '顺义区', '昌平区', '房山区', '门头沟区', '怀柔区', '平谷区', '密云区', '延庆区'] },
             '上海市': { '上海市': ['黄浦区', '徐汇区', '长宁区', '静安区', '普陀区', '虹口区', '杨浦区', '闵行区', '宝山区', '嘉定区', '浦东新区', '金山区', '松江区', '青浦区', '奉贤区', '崇明区'] },
@@ -97,22 +155,10 @@ window.RegionData = {
     },
 
     bindEvents: function() {
-        var provinceSelect = document.getElementById('region_province');
-        var citySelect = document.getElementById('region_city');
-        var districtSelect = document.getElementById('region_district');
-        if (!provinceSelect || !citySelect || !districtSelect) return;
-
-        // 移除旧事件，防止重复绑定
-        var newProvince = provinceSelect.cloneNode(true);
-        var newCity = citySelect.cloneNode(true);
-        var newDistrict = districtSelect.cloneNode(true);
-        provinceSelect.parentNode.replaceChild(newProvince, provinceSelect);
-        citySelect.parentNode.replaceChild(newCity, citySelect);
-        districtSelect.parentNode.replaceChild(newDistrict, districtSelect);
-
         var pSel = document.getElementById('region_province');
         var cSel = document.getElementById('region_city');
         var dSel = document.getElementById('region_district');
+        if (!pSel || !cSel || !dSel) return;
 
         pSel.onchange = function() {
             var province = this.value;
@@ -130,7 +176,6 @@ window.RegionData = {
                 districts.map(function(d) { return '<option value="' + d + '">' + d + '</option>'; }).join('');
         };
 
-        // 触发初始值
         if (pSel.value) {
             pSel.onchange();
             setTimeout(function() {
@@ -142,42 +187,54 @@ window.RegionData = {
     },
 
     getSelected: function() {
-        var provinceSelect = document.getElementById('region_province');
-        var citySelect = document.getElementById('region_city');
-        var districtSelect = document.getElementById('region_district');
-        if (!provinceSelect || !citySelect || !districtSelect) return null;
+        var pSel = document.getElementById('region_province');
+        var cSel = document.getElementById('region_city');
+        var dSel = document.getElementById('region_district');
+        if (!pSel || !cSel || !dSel) return null;
 
         return {
-            province: provinceSelect.value || '',
-            city: citySelect.value || '',
-            district: districtSelect.value || ''
+            province: pSel.value || '',
+            city: cSel.value || '',
+            district: dSel.value || ''
         };
     },
 
     setSelected: function(province, city, district) {
-        var provinceSelect = document.getElementById('region_province');
-        var citySelect = document.getElementById('region_city');
-        var districtSelect = document.getElementById('region_district');
-        if (!provinceSelect || !citySelect || !districtSelect) return;
+        var pSel = document.getElementById('region_province');
+        var cSel = document.getElementById('region_city');
+        var dSel = document.getElementById('region_district');
+        if (!pSel || !cSel || !dSel) return;
 
         if (province) {
-            provinceSelect.value = province;
-            provinceSelect.onchange && provinceSelect.onchange();
+            pSel.value = province;
+            if (typeof pSel.onchange === 'function') pSel.onchange();
         }
         if (city) {
             setTimeout(function() {
-                if (citySelect.querySelector('option[value="' + city + '"]')) {
-                    citySelect.value = city;
-                    citySelect.onchange && citySelect.onchange();
+                if (cSel.querySelector('option[value="' + city + '"]')) {
+                    cSel.value = city;
+                    if (typeof cSel.onchange === 'function') cSel.onchange();
                 }
             }, 100);
         }
         if (district) {
             setTimeout(function() {
-                if (districtSelect.querySelector('option[value="' + district + '"]')) {
-                    districtSelect.value = district;
+                if (dSel.querySelector('option[value="' + district + '"]')) {
+                    dSel.value = district;
                 }
             }, 200);
         }
+    },
+
+    // ★★★ 获取完整地址（省市区 + 详细地址拼接） ★★★
+    getFullAddress: function(detail) {
+        var selected = this.getSelected();
+        if (!selected) return detail || '';
+        var parts = [];
+        if (selected.province) parts.push(selected.province);
+        if (selected.city && selected.city !== selected.province) parts.push(selected.city);
+        if (selected.district && selected.district !== selected.city) parts.push(selected.district);
+        if (detail) parts.push(detail);
+        return parts.join('');
     }
 };

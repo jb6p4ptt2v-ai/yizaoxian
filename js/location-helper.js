@@ -1,14 +1,10 @@
 /**
  * 定位地址选择助手（拼多多风格 - 底部滑出弹窗）
- * 统一前后台定位逻辑：获取坐标 → 逆地理 → 弹窗选择 → 填充表单
  * 完全对齐拼多多收货地址定位交互：
- *   - 底部滑出弹窗（bottom sheet）
- *   - 搜索框（关键词过滤）
- *   - 刷新按钮（重新定位）
- *   - 地址名称（大号黑色）+ 完整地址（灰色小字）
- *   - 点击背景关闭
- *   - 选择后：省市区联动选中，详细地址填充（不含省市区前缀）
- *   - 最终显示：省 + 市 + 区 + 详细地址
+ * 1. 点击"定位"后弹窗列表显示：黑色大字地点名称 + 灰色小字完整地址
+ * 2. 详细地址填充不含省市区前缀
+ * 3. 最终地址显示：省市区 + 详细地址完整拼接
+ * 4. 使用高德定位插件提高精度
  */
 window.LocationHelper = (function() {
     'use strict';
@@ -61,6 +57,7 @@ window.LocationHelper = (function() {
             return;
         }
 
+        // ★★★ 使用高精度定位 ★★★
         MapService.locateCurrentPosition(function(result) {
             console.log('📍 定位回调:', result);
             if (!result || !result.success || !result.data) {
@@ -78,6 +75,7 @@ window.LocationHelper = (function() {
             _currentLng = lng;
             _currentLat = lat;
             console.log('🌐 经纬度:', lng, lat);
+            console.log('📍 定位精度:', result.accuracyText || '');
 
             var geocoder = _getGeocoder();
             if (!geocoder) {
@@ -96,14 +94,25 @@ window.LocationHelper = (function() {
 
                     // 主地址（格式化地址）
                     if (formatted) {
+                        // ★★★ 提取显示名称（用于黑色大字） ★★★
+                        var displayName = formatted;
+                        // 尝试从格式化地址中提取简短名称
+                        var parts = formatted.split(' ');
+                        if (parts.length > 1) {
+                            var lastPart = parts[parts.length - 1];
+                            if (lastPart.length < 20) {
+                                displayName = lastPart;
+                            }
+                        }
                         candidates.push({
-                            name: formatted,
+                            name: displayName,                    // 黑色大字（简短名称）
+                            fullAddress: formatted,               // 灰色小字（完整地址）
                             province: addrComp.province || '',
                             city: addrComp.city || '',
                             district: addrComp.district || '',
-                            detail: formatted,
                             street: addrComp.street || '',
-                            number: addrComp.streetNumber || ''
+                            number: addrComp.streetNumber || '',
+                            detail: formatted
                         });
                     }
 
@@ -111,28 +120,33 @@ window.LocationHelper = (function() {
                     if (regeo.pois && regeo.pois.length > 0) {
                         regeo.pois.slice(0, 20).forEach(function(poi) {
                             var poiAddress = poi.address || '';
+                            var fullAddr = poi.name + (poiAddress ? ' ' + poiAddress : '');
                             candidates.push({
-                                name: poi.name,
+                                name: poi.name,                    // 黑色大字：POI名称
+                                fullAddress: fullAddr,            // 灰色小字：完整地址
                                 province: addrComp.province || '',
                                 city: addrComp.city || '',
                                 district: addrComp.district || '',
-                                detail: poi.name + (poiAddress ? ' ' + poiAddress : ''),
                                 street: poiAddress,
-                                number: ''
+                                number: '',
+                                detail: fullAddr
                             });
                         });
                     }
 
                     // 如果候选列表为空，至少放一个格式化地址
                     if (candidates.length === 0 && formatted) {
+                        var parts2 = formatted.split(' ');
+                        var displayName2 = parts2.length > 1 ? parts2[parts2.length - 1] : formatted;
                         candidates.push({
-                            name: formatted,
+                            name: displayName2,
+                            fullAddress: formatted,
                             province: addrComp.province || '',
                             city: addrComp.city || '',
                             district: addrComp.district || '',
-                            detail: formatted,
                             street: addrComp.street || '',
-                            number: addrComp.streetNumber || ''
+                            number: addrComp.streetNumber || '',
+                            detail: formatted
                         });
                     }
 
@@ -153,7 +167,8 @@ window.LocationHelper = (function() {
     }
 
     /**
-     * ★★★ 拼多多风格弹窗 - 底部滑出（bottom sheet） ★★★
+     * ★★★ 拼多多风格弹窗 - 底部滑出 ★★★
+     * 列表项：黑色大字（地点名称）+ 灰色小字（完整地址）
      */
     function _showAddressPicker(candidates, lng, lat) {
         console.log('🖥️ 显示地址选择弹窗，候选数:', candidates.length);
@@ -235,7 +250,7 @@ window.LocationHelper = (function() {
             </button>
         `;
 
-        // ---------- 地址列表（拼多多风格） ----------
+        // ---------- 地址列表（拼多多风格：黑色大字 + 灰色小字） ----------
         var listWrap = document.createElement('div');
         listWrap.id = 'pickerListWrap';
         listWrap.style.cssText = `
@@ -245,7 +260,6 @@ window.LocationHelper = (function() {
             -webkit-overflow-scrolling: touch;
         `;
 
-        // 渲染列表项
         _renderListItems(listWrap, candidates);
 
         // ---------- 组装 ----------
@@ -261,14 +275,8 @@ window.LocationHelper = (function() {
             var style = document.createElement('style');
             style.id = 'pickerStyle';
             style.textContent = `
-                @keyframes pddFadeIn {
-                    from { opacity: 0; }
-                    to { opacity: 1; }
-                }
-                @keyframes pddSlideUp {
-                    from { transform: translateY(100%); }
-                    to { transform: translateY(0); }
-                }
+                @keyframes pddFadeIn { from { opacity: 0; } to { opacity: 1; } }
+                @keyframes pddSlideUp { from { transform: translateY(100%); } to { transform: translateY(0); } }
                 .picker-address-item {
                     padding: 12px 18px;
                     border-bottom: 1px solid #f0f0f0;
@@ -302,14 +310,12 @@ window.LocationHelper = (function() {
 
         // ---------- 事件绑定 ----------
 
-        // 点击背景关闭
         overlay.onclick = function(e) {
             if (e.target === overlay) {
                 overlay.remove();
             }
         };
 
-        // 搜索功能（实时过滤）
         var searchInput = document.getElementById('pickerSearchInput');
         if (searchInput) {
             searchInput.oninput = function() {
@@ -324,7 +330,6 @@ window.LocationHelper = (function() {
             };
         }
 
-        // 刷新功能
         var refreshBtn = document.getElementById('pickerRefreshBtn');
         if (refreshBtn) {
             refreshBtn.onclick = function() {
@@ -353,41 +358,49 @@ window.LocationHelper = (function() {
                             var candidates = [];
 
                             if (formatted) {
+                                var parts = formatted.split(' ');
+                                var displayName = parts.length > 1 ? parts[parts.length - 1] : formatted;
                                 candidates.push({
-                                    name: formatted,
+                                    name: displayName,
+                                    fullAddress: formatted,
                                     province: addrComp.province || '',
                                     city: addrComp.city || '',
                                     district: addrComp.district || '',
-                                    detail: formatted,
                                     street: addrComp.street || '',
-                                    number: addrComp.streetNumber || ''
+                                    number: addrComp.streetNumber || '',
+                                    detail: formatted
                                 });
                             }
 
                             if (regeo.pois && regeo.pois.length > 0) {
                                 regeo.pois.slice(0, 20).forEach(function(poi) {
                                     var poiAddress = poi.address || '';
+                                    var fullAddr = poi.name + (poiAddress ? ' ' + poiAddress : '');
                                     candidates.push({
                                         name: poi.name,
+                                        fullAddress: fullAddr,
                                         province: addrComp.province || '',
                                         city: addrComp.city || '',
                                         district: addrComp.district || '',
-                                        detail: poi.name + (poiAddress ? ' ' + poiAddress : ''),
                                         street: poiAddress,
-                                        number: ''
+                                        number: '',
+                                        detail: fullAddr
                                     });
                                 });
                             }
 
                             if (candidates.length === 0 && formatted) {
+                                var parts2 = formatted.split(' ');
+                                var displayName2 = parts2.length > 1 ? parts2[parts2.length - 1] : formatted;
                                 candidates.push({
-                                    name: formatted,
+                                    name: displayName2,
+                                    fullAddress: formatted,
                                     province: addrComp.province || '',
                                     city: addrComp.city || '',
                                     district: addrComp.district || '',
-                                    detail: formatted,
                                     street: addrComp.street || '',
-                                    number: addrComp.streetNumber || ''
+                                    number: addrComp.streetNumber || '',
+                                    detail: formatted
                                 });
                             }
 
@@ -409,7 +422,7 @@ window.LocationHelper = (function() {
     }
 
     /**
-     * ★★★ 渲染地址列表项（拼多多风格：黑色名称 + 灰色完整地址） ★★★
+     * ★★★ 渲染地址列表项（拼多多风格：黑色大字 + 灰色小字） ★★★
      */
     function _renderListItems(container, candidates) {
         if (!container) return;
@@ -422,40 +435,27 @@ window.LocationHelper = (function() {
         var html = '';
         candidates.forEach(function(item) {
             var displayName = item.name || '未命名';
-            // 完整地址（用于灰色小字显示）
-            var fullAddress = item.detail || '';
+            var displayFullAddress = item.fullAddress || item.detail || '';
 
-            // 如果完整地址与名称相同，不重复显示
-            if (fullAddress === displayName) {
-                fullAddress = '';
+            // 如果完整地址和名称相同，不重复显示
+            if (displayFullAddress === displayName) {
+                displayFullAddress = '';
             }
 
-            // 如果完整地址为空，尝试用 province+city+district 拼接
-            if (!fullAddress) {
-                var parts = [];
-                if (item.province) parts.push(item.province);
-                if (item.city && item.city !== item.province) parts.push(item.city);
-                if (item.district && item.district !== item.city) parts.push(item.district);
-                if (parts.length > 0) {
-                    fullAddress = parts.join('');
-                }
-            }
-
-            // 转义特殊字符（用于onclick参数）
+            // 转义特殊字符
             var safeName = displayName.replace(/'/g, "\\'");
-            var safeFullAddress = fullAddress.replace(/'/g, "\\'");
+            var safeFullAddress = displayFullAddress.replace(/'/g, "\\'");
             var safeProvince = (item.province || '').replace(/'/g, "\\'");
             var safeCity = (item.city || '').replace(/'/g, "\\'");
             var safeDistrict = (item.district || '').replace(/'/g, "\\'");
             var safeStreet = (item.street || '').replace(/'/g, "\\'");
-            var safeDetail = (item.detail || item.name || '').replace(/'/g, "\\'");
+            var safeDetail = (item.detail || '').replace(/'/g, "\\'");
             var safeNumber = (item.number || '').replace(/'/g, "\\'");
 
-            // 拼多多风格：名称（黑色大字）+ 完整地址（灰色小字）
             html += `
                 <div class="picker-address-item" onclick="LocationHelper._selectAddress('${safeName}', '${safeFullAddress}', '${safeProvince}', '${safeCity}', '${safeDistrict}', '${safeStreet}', '${safeDetail}', '${safeNumber}')">
                     <div class="name">${displayName}</div>
-                    ${fullAddress ? '<div class="address">' + fullAddress + '</div>' : ''}
+                    ${displayFullAddress ? '<div class="address">' + displayFullAddress + '</div>' : ''}
                 </div>
             `;
         });
@@ -476,7 +476,7 @@ window.LocationHelper = (function() {
         }
 
         var filtered = _currentCandidates.filter(function(item) {
-            var searchText = (item.name + ' ' + item.detail).toLowerCase();
+            var searchText = (item.name + ' ' + item.fullAddress + ' ' + item.detail).toLowerCase();
             return searchText.indexOf(keyword.toLowerCase()) !== -1;
         });
 
@@ -485,44 +485,34 @@ window.LocationHelper = (function() {
 
     /**
      * ★★★ 选择地址（完全对齐拼多多） ★★★
-     * 规则：
-     * 1. 省市区联动自动选中
-     * 2. 详细地址填充：去除省市区前缀，保留街道及以下
-     * 3. 最终显示：省 + 市 + 区 + 详细地址
+     * 1. 详细地址填充不含省市区前缀 → "南正街建安小区建安小区-12栋"
+     * 2. 最终显示：省市区 + 详细地址完整拼接 → "湖北省宜昌市当阳市南正街建安小区建安小区-12栋"
      */
     function _selectAddress(name, fullAddress, province, city, district, street, detail, number) {
         console.log('✅ 用户选择了地址:', name);
-        console.log('📋 完整地址:', fullAddress);
+        console.log('📍 完整地址:', fullAddress);
 
         var addressInputId = _currentAddressInputId;
         var regionData = _currentRegionData;
         var onAddressPicked = _currentOnAddressPicked;
 
         // ================================================================
-        // 1. 填充省市区联动（使用原始省市区数据）
+        // ★★★ 步骤1：填充省市区联动 ★★★
         // ================================================================
         if (regionData && typeof regionData.setSelected === 'function') {
             try {
                 regionData.setSelected(province, city, district);
-                console.log('✅ 省市区已联动:', province, city, district);
             } catch(e) {
                 console.warn('regionData.setSelected 调用失败:', e);
             }
         }
 
         // ================================================================
-        // 2. 提取详细地址（不包含省市区前缀）
+        // ★★★ 步骤2：提取详细地址（不含省市区） ★★★
         // ================================================================
-        var detailAddress = '';
+        // 从 fullAddress 或 detail 中提取详细地址
+        var sourceAddress = fullAddress || detail || name || '';
 
-        // 优先使用 detail（候选地址的详细部分）
-        if (detail && detail.length > 0) {
-            detailAddress = detail;
-        } else if (name && name.length > 0) {
-            detailAddress = name;
-        }
-
-        // 从 fullAddress 中提取详细地址（去除省市区前缀）
         // 构建省市区前缀字符串
         var prefixParts = [];
         if (province) prefixParts.push(province);
@@ -530,11 +520,10 @@ window.LocationHelper = (function() {
         if (district && district !== city) prefixParts.push(district);
         var prefix = prefixParts.join('');
 
-        // 从完整地址中移除省市区前缀
-        var cleanedDetail = detailAddress;
+        // 移除省市区前缀，只保留详细地址
+        var cleanedDetail = sourceAddress;
         if (prefix && cleanedDetail.indexOf(prefix) === 0) {
             cleanedDetail = cleanedDetail.substring(prefix.length).trim();
-            // 清理开头可能残留的分隔符
             cleanedDetail = cleanedDetail.replace(/^[-,，、\s]+/, '');
         }
 
@@ -543,18 +532,18 @@ window.LocationHelper = (function() {
             var streetParts = [];
             if (street) streetParts.push(street);
             if (number) streetParts.push(number);
-            cleanedDetail = streetParts.join('') || detailAddress;
+            cleanedDetail = streetParts.join('') || sourceAddress;
         }
 
         // 如果还是空，使用 name
         if (!cleanedDetail || cleanedDetail.length < 2) {
-            cleanedDetail = name || detailAddress;
+            cleanedDetail = name || sourceAddress;
         }
 
         console.log('📝 详细地址（不含省市区）:', cleanedDetail);
 
         // ================================================================
-        // 3. 填充详细地址到输入框
+        // ★★★ 步骤3：填充详细地址到输入框 ★★★
         // ================================================================
         var addrInput = document.getElementById(addressInputId);
         if (addrInput) {
@@ -565,21 +554,35 @@ window.LocationHelper = (function() {
             addrInput.dataset.city = city || '';
             addrInput.dataset.district = district || '';
             addrInput.dataset.street = street || '';
-            addrInput.dataset.fullAddress = fullAddress || detail || name || '';
+            addrInput.dataset.fullAddress = sourceAddress;
             console.log('📝 已填充详细地址:', cleanedDetail);
         } else {
             console.error('❌ 未找到输入框 #' + addressInputId);
         }
 
         // ================================================================
-        // 4. 执行回调
+        // ★★★ 步骤4：获取完整地址（省市区 + 详细地址拼接） ★★★
+        // ================================================================
+        var fullAddressResult = '';
+        var parts2 = [];
+        if (province) parts2.push(province);
+        if (city && city !== province) parts2.push(city);
+        if (district && district !== city) parts2.push(district);
+        if (cleanedDetail) parts2.push(cleanedDetail);
+        fullAddressResult = parts2.join('');
+
+        console.log('📝 完整地址（省市区+详细地址）:', fullAddressResult);
+
+        // ================================================================
+        // ★★★ 步骤5：执行回调 ★★★
         // ================================================================
         if (typeof onAddressPicked === 'function') {
             try {
                 onAddressPicked({
                     name: name,
                     detail: cleanedDetail,
-                    fullAddress: fullAddress || detail || name || '',
+                    fullAddress: fullAddressResult,
+                    sourceFullAddress: sourceAddress,
                     province: province,
                     city: city,
                     district: district,
@@ -592,7 +595,7 @@ window.LocationHelper = (function() {
         }
 
         // ================================================================
-        // 5. 关闭弹窗
+        // ★★★ 步骤6：关闭弹窗 ★★★
         // ================================================================
         var overlay = document.getElementById('pddAddressModal');
         if (overlay) overlay.remove();
@@ -609,4 +612,4 @@ window.LocationHelper = (function() {
         _showAddressPicker: _showAddressPicker
     };
 })();
-console.log('✅ LocationHelper 已加载（拼多多风格：弹窗列表显示名称+完整地址，详细地址不含省市区）');
+console.log('✅ LocationHelper 已加载（拼多多完全对齐：黑色大字+灰色小字，省市区分离）');
