@@ -1,6 +1,6 @@
 // ============================================================
-// 宜早鲜 Cloudflare Workers API - v5.0 完整版
-// 包含：商品、订单、评价、收藏、搜索、优惠券、消息、售后、物流、地区、图片上传
+// 宜早鲜 Cloudflare Workers API - v5.1 修复版
+// 修复：/regions/sync 中 window 未定义问题
 // ============================================================
 
 export default {
@@ -26,7 +26,7 @@ export default {
             }
 
             // ============================================================
-            // 用户模块（保持不变）
+            // 用户模块
             // ============================================================
             if (path === '/users/login' && method === 'POST') {
                 const body = await request.json();
@@ -350,7 +350,7 @@ export default {
             }
 
             // ============================================================
-            // ★★★ 搜索（含热搜、历史、筛选） ★★★
+            // 搜索
             // ============================================================
             if (path === '/search' && method === 'GET') {
                 const keyword = url.searchParams.get('keyword') || '';
@@ -462,7 +462,7 @@ export default {
             }
 
             // ============================================================
-            // ★★★ 收藏 ★★★
+            // 收藏
             // ============================================================
             if (path === '/favorites' && method === 'GET') {
                 const userId = url.searchParams.get('userId');
@@ -510,7 +510,7 @@ export default {
             }
 
             // ============================================================
-            // ★★★ 订单 ★★★
+            // 订单
             // ============================================================
             if (path === '/orders' && method === 'GET') {
                 const result = await env.DB.prepare('SELECT * FROM orders ORDER BY created_at DESC').all();
@@ -662,10 +662,8 @@ export default {
             }
 
             // ============================================================
-            // ★★★ 评价模块（含图片上传） ★★★
+            // 评价
             // ============================================================
-
-            // 获取评价图片上传预签名URL
             if (path === '/reviews/upload-url' && method === 'POST') {
                 const body = await request.json();
                 const { userId, filename, contentType } = body;
@@ -676,28 +674,22 @@ export default {
                     });
                 }
 
-                // 生成唯一文件名
                 const ext = filename.split('.').pop() || 'jpg';
                 const key = `reviews/${userId}/${Date.now()}_${Math.random().toString(36).slice(2, 8)}.${ext}`;
 
-                // 生成R2预签名URL（使用 Workers 的 R2 绑定）
-                // 注意：需要在 wrangler.toml 中配置 R2 绑定: [[r2_buckets]] binding = "BUCKET" bucket_name = "yizaoxian"
                 let uploadUrl = '';
                 let publicUrl = '';
 
                 if (env.BUCKET) {
                     try {
-                        // 使用 R2 预签名 URL（有效期 5 分钟）
                         const urlObj = await env.BUCKET.createPresignedUrl(key, {
                             expiry: 300,
                             method: 'PUT',
-                            // 限制文件类型和大小
                             headers: {
                                 'Content-Type': contentType || 'image/jpeg',
                             },
                         });
                         uploadUrl = urlObj.toString();
-                        // 构造公开访问 URL（如果桶是公共读的）
                         publicUrl = `https://yizaoxian.${env.BUCKET.domain}/` + key;
                     } catch (e) {
                         console.error('生成预签名URL失败:', e);
@@ -707,7 +699,6 @@ export default {
                         });
                     }
                 } else {
-                    // 如果 R2 未配置，返回模拟 URL（用于测试）
                     console.warn('R2未配置，使用模拟URL');
                     uploadUrl = 'https://mock-r2.example.com/' + key;
                     publicUrl = 'https://mock-r2.example.com/' + key;
@@ -723,7 +714,6 @@ export default {
                 });
             }
 
-            // 提交评价（含图片URL数组）
             if (path === '/reviews' && method === 'POST') {
                 const body = await request.json();
                 const { orderId, productId, userId, rating, content, images, tags } = body;
@@ -756,7 +746,6 @@ export default {
                 });
             }
 
-            // 获取商品评价列表（含图片）
             if (path === '/reviews/product' && method === 'GET') {
                 const productId = url.searchParams.get('productId');
                 const sort = url.searchParams.get('sort') || 'newest';
@@ -792,7 +781,6 @@ export default {
 
                 const result = await env.DB.prepare(query).bind(...params).all();
 
-                // 解析图片 JSON
                 const reviews = result.results.map(r => {
                     try {
                         r.images = JSON.parse(r.images || '[]');
@@ -833,7 +821,6 @@ export default {
                 });
             }
 
-            // 获取所有评价（管理员）
             if (path === '/reviews/all' && method === 'GET') {
                 const result = await env.DB.prepare(
                     `SELECT r.*, u.phone as user_phone, p.name as product_name, p.emoji as product_emoji
@@ -842,7 +829,6 @@ export default {
                      JOIN products p ON r.product_id = p.id
                      ORDER BY r.created_at DESC LIMIT 100`
                 ).all();
-                // 解析图片 JSON
                 const reviews = result.results.map(r => {
                     try {
                         r.images = JSON.parse(r.images || '[]');
@@ -899,7 +885,7 @@ export default {
             }
 
             // ============================================================
-            // ★★★ 地区数据（动态加载） ★★★
+            // 地区数据
             // ============================================================
             if (path === '/regions' && method === 'GET') {
                 const parentId = url.searchParams.get('parentId') || '';
@@ -920,7 +906,7 @@ export default {
                 });
             }
 
-            // 同步地区数据（从高德API）
+            // ★★★ 修复：移除 window 引用，直接使用 env.AMAP_KEY ★★★
             if (path === '/regions/sync' && method === 'POST') {
                 const body = await request.json();
                 const { keyword } = body;
@@ -931,8 +917,8 @@ export default {
                     });
                 }
 
-                // 调用高德地区查询API
-                const amapKey = env.AMAP_KEY || (window?.__ENV__?.AMAP_KEY) || '';
+                // ★★★ 修复点：使用 env.AMAP_KEY，不再引用 window ★★★
+                const amapKey = env.AMAP_KEY || '';
                 if (!amapKey) {
                     return new Response(JSON.stringify({ error: '高德地图Key未配置' }), {
                         status: 500,
@@ -952,13 +938,11 @@ export default {
                     });
                 }
 
-                // 递归插入地区数据
                 const districts = data.districts || [];
                 let insertedCount = 0;
                 let skippedCount = 0;
 
                 async function insertRegion(district, parentId, level) {
-                    // 检查是否已存在
                     const existing = await env.DB.prepare('SELECT id FROM regions WHERE name = ? AND parent_id = ? AND level = ?')
                         .bind(district.name, parentId, level).first();
                     if (existing) {
@@ -973,7 +957,6 @@ export default {
                     ).bind(id, parentId, district.name, level, district.adcode || '', new Date().toISOString()).run();
                     insertedCount++;
 
-                    // 处理子地区
                     if (district.districts && district.districts.length > 0) {
                         for (const sub of district.districts) {
                             await insertRegion(sub, id, level + 1);
