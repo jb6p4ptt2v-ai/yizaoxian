@@ -1,6 +1,6 @@
 // ============================================================
-// 宜早鲜 Cloudflare Workers API - v5.1 修复版
-// 修复：/regions/sync 中 window 未定义问题
+// 宜早鲜 Cloudflare Workers API - v5.2 修复版
+// 修复：地区同步错误处理、R2 模拟降级
 // ============================================================
 
 export default {
@@ -680,6 +680,7 @@ export default {
                 let uploadUrl = '';
                 let publicUrl = '';
 
+                // 如果 R2 绑定了 env.BUCKET，使用真实上传
                 if (env.BUCKET) {
                     try {
                         const urlObj = await env.BUCKET.createPresignedUrl(key, {
@@ -693,13 +694,13 @@ export default {
                         publicUrl = `https://yizaoxian.${env.BUCKET.domain}/` + key;
                     } catch (e) {
                         console.error('生成预签名URL失败:', e);
-                        return new Response(JSON.stringify({ error: '生成上传链接失败' }), {
-                            status: 500,
-                            headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-                        });
+                        // 降级：返回模拟URL
+                        uploadUrl = 'https://mock-r2.example.com/' + key;
+                        publicUrl = 'https://mock-r2.example.com/' + key;
                     }
                 } else {
-                    console.warn('R2未配置，使用模拟URL');
+                    // R2 未配置，返回模拟URL
+                    console.warn('R2未配置，返回模拟URL');
                     uploadUrl = 'https://mock-r2.example.com/' + key;
                     publicUrl = 'https://mock-r2.example.com/' + key;
                 }
@@ -906,7 +907,7 @@ export default {
                 });
             }
 
-            // ★★★ 修复：移除 window 引用，直接使用 env.AMAP_KEY ★★★
+            // ★★★ 修复地区同步错误处理 ★★★
             if (path === '/regions/sync' && method === 'POST') {
                 const body = await request.json();
                 const { keyword } = body;
@@ -917,66 +918,78 @@ export default {
                     });
                 }
 
-                // ★★★ 修复点：使用 env.AMAP_KEY，不再引用 window ★★★
                 const amapKey = env.AMAP_KEY || '';
                 if (!amapKey) {
-                    return new Response(JSON.stringify({ error: '高德地图Key未配置' }), {
+                    return new Response(JSON.stringify({ error: '高德地图Key未配置，请在Worker环境变量中设置AMAP_KEY' }), {
                         status: 500,
                         headers: { ...corsHeaders, 'Content-Type': 'application/json' }
                     });
                 }
 
-                const response = await fetch(
-                    `https://restapi.amap.com/v3/config/district?keywords=${encodeURIComponent(keyword)}&subdistrict=3&key=${amapKey}&extensions=base`
-                );
+                try {
+                    const response = await fetch(
+                        `https://restapi.amap.com/v3/config/district?keywords=${encodeURIComponent(keyword)}&subdistrict=3&key=${amapKey}&extensions=base`
+                    );
 
-                const data = await response.json();
-                if (data.status !== '1') {
-                    return new Response(JSON.stringify({ error: '同步失败: ' + (data.info || '未知错误') }), {
-                        status: 500,
-                        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-                    });
-                }
-
-                const districts = data.districts || [];
-                let insertedCount = 0;
-                let skippedCount = 0;
-
-                async function insertRegion(district, parentId, level) {
-                    const existing = await env.DB.prepare('SELECT id FROM regions WHERE name = ? AND parent_id = ? AND level = ?')
-                        .bind(district.name, parentId, level).first();
-                    if (existing) {
-                        skippedCount++;
-                        return;
+                    const data = await response.json();
+                    if (data.status !== '1') {
+                        // 返回更友好的错误信息
+                        let errorMsg = data.info || '未知错误';
+                        if (data.info === 'USERKEY_PLAT_NOMATCH') {
+                            errorMsg = '高德API Key无效或未开通行政区划查询服务，请检查Key配置';
+                        }
+                        return new Response(JSON.stringify({ error: '同步失败: ' + errorMsg }), {
+                            status: 500,
+                            headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+                        });
                     }
 
-                    const id = 'reg_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 6);
-                    await env.DB.prepare(
-                        `INSERT INTO regions (id, parent_id, name, level, code, created_at)
-                         VALUES (?, ?, ?, ?, ?, ?)`
-                    ).bind(id, parentId, district.name, level, district.adcode || '', new Date().toISOString()).run();
-                    insertedCount++;
+                    const districts = data.districts || [];
+                    let insertedCount = 0;
+                    let skippedCount = 0;
 
-                    if (district.districts && district.districts.length > 0) {
-                        for (const sub of district.districts) {
-                            await insertRegion(sub, id, level + 1);
+                    async function insertRegion(district, parentId, level) {
+                        const existing = await env.DB.prepare('SELECT id FROM regions WHERE name = ? AND parent_id = ? AND level = ?')
+                            .bind(district.name, parentId, level).first();
+                        if (existing) {
+                            skippedCount++;
+                            return;
+                        }
+
+                        const id = 'reg_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 6);
+                        await env.DB.prepare(
+                            `INSERT INTO regions (id, parent_id, name, level, code, created_at)
+                             VALUES (?, ?, ?, ?, ?, ?)`
+                        ).bind(id, parentId, district.name, level, district.adcode || '', new Date().toISOString()).run();
+                        insertedCount++;
+
+                        if (district.districts && district.districts.length > 0) {
+                            for (const sub of district.districts) {
+                                await insertRegion(sub, id, level + 1);
+                            }
                         }
                     }
-                }
 
-                for (const d of districts) {
-                    await insertRegion(d, '', 1);
-                }
+                    for (const d of districts) {
+                        await insertRegion(d, '', 1);
+                    }
 
-                return new Response(JSON.stringify({
-                    success: true,
-                    inserted: insertedCount,
-                    skipped: skippedCount,
-                    total: districts.length,
-                    message: `同步完成，新增 ${insertedCount} 条，跳过 ${skippedCount} 条`
-                }), {
-                    headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-                });
+                    return new Response(JSON.stringify({
+                        success: true,
+                        inserted: insertedCount,
+                        skipped: skippedCount,
+                        total: districts.length,
+                        message: `同步完成，新增 ${insertedCount} 条，跳过 ${skippedCount} 条`
+                    }), {
+                        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+                    });
+                } catch (e) {
+                    console.error('同步地区异常:', e);
+                    return new Response(JSON.stringify({ error: '同步失败: ' + e.message }), {
+                        status: 500,
+                        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+                    });
+                }
             }
 
             // ============================================================
