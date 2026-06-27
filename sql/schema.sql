@@ -1,6 +1,5 @@
 -- ============================================================
--- 宜早鲜 D1 数据库表结构（v4.0 - 完整版）
--- 包含：商品、订单、评价、收藏、搜索、优惠券、消息、售后、物流
+-- 宜早鲜 D1 数据库表结构（v5.0 - 含地区表、规格、图片）
 -- ============================================================
 
 -- ============================================================
@@ -17,7 +16,7 @@ CREATE TABLE IF NOT EXISTS users (
 );
 
 -- ============================================================
--- 2. 地址表
+-- 2. 地址表（含 last_used）
 -- ============================================================
 CREATE TABLE IF NOT EXISTS addresses (
     id TEXT PRIMARY KEY,
@@ -56,7 +55,7 @@ CREATE TABLE IF NOT EXISTS suppliers (
 );
 
 -- ============================================================
--- 4. 商品表（新增：已售、产地、图片）
+-- 4. 商品表（含已售、产地、图片）
 -- ============================================================
 CREATE TABLE IF NOT EXISTS products (
     id TEXT PRIMARY KEY,
@@ -71,9 +70,9 @@ CREATE TABLE IF NOT EXISTS products (
     status TEXT DEFAULT 'on',
     is_hot INTEGER DEFAULT 0,
     today_pickup INTEGER DEFAULT 1,
-    sales_count INTEGER DEFAULT 0,          -- 已售数量
-    origin TEXT DEFAULT '',                  -- 产地（如：湖北省宜昌市）
-    images TEXT DEFAULT '[]',               -- 商品图片JSON数组
+    sales_count INTEGER DEFAULT 0,
+    origin TEXT DEFAULT '',
+    images TEXT DEFAULT '[]',
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL,
     FOREIGN KEY (supplier_id) REFERENCES suppliers(id) ON DELETE SET NULL
@@ -85,7 +84,7 @@ CREATE TABLE IF NOT EXISTS products (
 CREATE TABLE IF NOT EXISTS product_specs (
     id TEXT PRIMARY KEY,
     product_id TEXT NOT NULL,
-    spec_name TEXT NOT NULL,                -- 大份/小份/1kg
+    spec_name TEXT NOT NULL,
     price REAL NOT NULL,
     stock INTEGER DEFAULT 0,
     sku_code TEXT DEFAULT '',
@@ -94,7 +93,7 @@ CREATE TABLE IF NOT EXISTS product_specs (
 );
 
 -- ============================================================
--- 6. 订单表（新增：提货码、截单、预计提货）
+-- 6. 订单表
 -- ============================================================
 CREATE TABLE IF NOT EXISTS orders (
     id TEXT PRIMARY KEY,
@@ -118,27 +117,27 @@ CREATE TABLE IF NOT EXISTS orders (
 CREATE TABLE IF NOT EXISTS order_logistics (
     id TEXT PRIMARY KEY,
     order_id TEXT NOT NULL,
-    status TEXT DEFAULT 'pending',          -- pending/shipping/delivered
+    status TEXT DEFAULT 'pending',
     tracking_number TEXT DEFAULT '',
     carrier TEXT DEFAULT '',
-    logistics_info TEXT DEFAULT '[]',       -- JSON轨迹数组
+    logistics_info TEXT DEFAULT '[]',
     updated_at TEXT NOT NULL,
     FOREIGN KEY (order_id) REFERENCES orders(id) ON DELETE CASCADE
 );
 
 -- ============================================================
--- 8. 评价表
+-- 8. 评价表（含 images 字段，存储图片 URL 数组）
 -- ============================================================
 CREATE TABLE IF NOT EXISTS reviews (
     id TEXT PRIMARY KEY,
     order_id TEXT NOT NULL,
     product_id TEXT NOT NULL,
     user_id TEXT NOT NULL,
-    rating INTEGER NOT NULL,                -- 1-5星
+    rating INTEGER NOT NULL,
     content TEXT DEFAULT '',
-    images TEXT DEFAULT '[]',               -- 评价图片JSON数组
-    tags TEXT DEFAULT '[]',                 -- 评价标签JSON数组（如：["新鲜","好吃"]）
-    reply TEXT DEFAULT '',                  -- 商家回复
+    images TEXT DEFAULT '[]',
+    tags TEXT DEFAULT '[]',
+    reply TEXT DEFAULT '',
     reply_at TEXT,
     likes INTEGER DEFAULT 0,
     created_at TEXT NOT NULL,
@@ -191,9 +190,9 @@ CREATE TABLE IF NOT EXISTS search_history (
 CREATE TABLE IF NOT EXISTS coupons (
     id TEXT PRIMARY KEY,
     name TEXT NOT NULL,
-    type TEXT NOT NULL,                     -- discount / full_reduction
-    value REAL NOT NULL,                    -- 折扣金额或折扣比例
-    min_amount REAL DEFAULT 0,              -- 满减门槛
+    type TEXT NOT NULL,
+    value REAL NOT NULL,
+    min_amount REAL DEFAULT 0,
     expire_at TEXT NOT NULL,
     stock INTEGER DEFAULT 999,
     created_at TEXT NOT NULL
@@ -219,7 +218,7 @@ CREATE TABLE IF NOT EXISTS user_coupons (
 CREATE TABLE IF NOT EXISTS messages (
     id TEXT PRIMARY KEY,
     user_id TEXT NOT NULL,
-    type TEXT NOT NULL,                     -- order / system / promotion
+    type TEXT NOT NULL,
     title TEXT NOT NULL,
     content TEXT NOT NULL,
     is_read INTEGER DEFAULT 0,
@@ -235,10 +234,10 @@ CREATE TABLE IF NOT EXISTS after_sales (
     id TEXT PRIMARY KEY,
     order_id TEXT NOT NULL,
     user_id TEXT NOT NULL,
-    type TEXT NOT NULL,                     -- refund / return
+    type TEXT NOT NULL,
     reason TEXT NOT NULL,
     description TEXT DEFAULT '',
-    status TEXT DEFAULT 'pending',          -- pending / approved / rejected / completed
+    status TEXT DEFAULT 'pending',
     admin_reply TEXT DEFAULT '',
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL,
@@ -284,18 +283,28 @@ CREATE TABLE IF NOT EXISTS admins (
 );
 
 -- ============================================================
--- 索引
+-- ★★★ 19. 地区数据表（动态加载） ★★★
 -- ============================================================
+CREATE TABLE IF NOT EXISTS regions (
+    id TEXT PRIMARY KEY,
+    parent_id TEXT DEFAULT '',
+    name TEXT NOT NULL,
+    level INTEGER NOT NULL,  -- 1:省 2:市 3:区/县
+    code TEXT DEFAULT '',
+    created_at TEXT NOT NULL
+);
+
+-- 索引
+CREATE INDEX IF NOT EXISTS idx_regions_parent_id ON regions(parent_id);
+CREATE INDEX IF NOT EXISTS idx_regions_level ON regions(level);
 CREATE INDEX IF NOT EXISTS idx_users_phone ON users(phone);
 CREATE INDEX IF NOT EXISTS idx_addresses_user_id ON addresses(user_id);
 CREATE INDEX IF NOT EXISTS idx_products_supplier_id ON products(supplier_id);
 CREATE INDEX IF NOT EXISTS idx_products_category ON products(category);
 CREATE INDEX IF NOT EXISTS idx_products_is_hot ON products(is_hot);
 CREATE INDEX IF NOT EXISTS idx_orders_status ON orders(status);
-CREATE INDEX IF NOT EXISTS idx_orders_user_id ON orders(customer_phone);
 CREATE INDEX IF NOT EXISTS idx_reviews_product_id ON reviews(product_id);
 CREATE INDEX IF NOT EXISTS idx_reviews_user_id ON reviews(user_id);
-CREATE INDEX IF NOT EXISTS idx_reviews_rating ON reviews(rating);
 CREATE INDEX IF NOT EXISTS idx_favorites_user_id ON favorites(user_id);
 CREATE INDEX IF NOT EXISTS idx_search_history_user_id ON search_history(user_id);
 CREATE INDEX IF NOT EXISTS idx_messages_user_id ON messages(user_id);
@@ -312,3 +321,44 @@ CREATE INDEX IF NOT EXISTS idx_review_likes_review_id ON review_likes(review_id)
 -- ============================================================
 INSERT OR IGNORE INTO admins (id, username, password, permissions, created_at)
 VALUES ('admin_001', 'admin', '123456', '["dashboard","suppliers","products","inventory","orders","finance","backup","members","profile","reviews","after_sales","coupons","messages"]', datetime('now'));
+
+-- ============================================================
+-- ★★★ 插入初始地区数据（省/直辖市） ★★★
+-- ============================================================
+INSERT OR IGNORE INTO regions (id, parent_id, name, level, created_at) VALUES
+('r1', '', '北京市', 1, datetime('now')),
+('r2', '', '上海市', 1, datetime('now')),
+('r3', '', '天津市', 1, datetime('now')),
+('r4', '', '重庆市', 1, datetime('now')),
+('r5', '', '河北省', 1, datetime('now')),
+('r6', '', '山西省', 1, datetime('now')),
+('r7', '', '辽宁省', 1, datetime('now')),
+('r8', '', '吉林省', 1, datetime('now')),
+('r9', '', '黑龙江省', 1, datetime('now')),
+('r10', '', '江苏省', 1, datetime('now')),
+('r11', '', '浙江省', 1, datetime('now')),
+('r12', '', '安徽省', 1, datetime('now')),
+('r13', '', '福建省', 1, datetime('now')),
+('r14', '', '江西省', 1, datetime('now')),
+('r15', '', '山东省', 1, datetime('now')),
+('r16', '', '河南省', 1, datetime('now')),
+('r17', '', '湖北省', 1, datetime('now')),
+('r18', '', '湖南省', 1, datetime('now')),
+('r19', '', '广东省', 1, datetime('now')),
+('r20', '', '海南省', 1, datetime('now')),
+('r21', '', '四川省', 1, datetime('now')),
+('r22', '', '贵州省', 1, datetime('now')),
+('r23', '', '云南省', 1, datetime('now')),
+('r24', '', '陕西省', 1, datetime('now')),
+('r25', '', '甘肃省', 1, datetime('now')),
+('r26', '', '青海省', 1, datetime('now')),
+('r27', '', '台湾省', 1, datetime('now')),
+('r28', '', '内蒙古自治区', 1, datetime('now')),
+('r29', '', '广西壮族自治区', 1, datetime('now')),
+('r30', '', '西藏自治区', 1, datetime('now')),
+('r31', '', '宁夏回族自治区', 1, datetime('now')),
+('r32', '', '新疆维吾尔自治区', 1, datetime('now')),
+('r33', '', '香港特别行政区', 1, datetime('now')),
+('r34', '', '澳门特别行政区', 1, datetime('now'));
+
+-- 注意：市/区数据量巨大，建议通过后台“同步地区数据”功能从高德API动态获取，此处不全部硬编码。

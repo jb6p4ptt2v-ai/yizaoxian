@@ -1,7 +1,6 @@
 // ============================================================
-// 宜早鲜 Cloudflare Workers API - v4.0 完整版
-// 包含：商品、订单、评价、收藏、搜索、优惠券、消息、售后、物流
-// 修复：/reviews/all 路由、/after-sales 允许无 userId
+// 宜早鲜 Cloudflare Workers API - v5.0 完整版
+// 包含：商品、订单、评价、收藏、搜索、优惠券、消息、售后、物流、地区、图片上传
 // ============================================================
 
 export default {
@@ -27,7 +26,7 @@ export default {
             }
 
             // ============================================================
-            // 用户模块
+            // 用户模块（保持不变）
             // ============================================================
             if (path === '/users/login' && method === 'POST') {
                 const body = await request.json();
@@ -351,7 +350,7 @@ export default {
             }
 
             // ============================================================
-            // 搜索
+            // ★★★ 搜索（含热搜、历史、筛选） ★★★
             // ============================================================
             if (path === '/search' && method === 'GET') {
                 const keyword = url.searchParams.get('keyword') || '';
@@ -463,7 +462,7 @@ export default {
             }
 
             // ============================================================
-            // 收藏
+            // ★★★ 收藏 ★★★
             // ============================================================
             if (path === '/favorites' && method === 'GET') {
                 const userId = url.searchParams.get('userId');
@@ -511,7 +510,7 @@ export default {
             }
 
             // ============================================================
-            // 订单
+            // ★★★ 订单 ★★★
             // ============================================================
             if (path === '/orders' && method === 'GET') {
                 const result = await env.DB.prepare('SELECT * FROM orders ORDER BY created_at DESC').all();
@@ -663,8 +662,68 @@ export default {
             }
 
             // ============================================================
-            // 评价模块
+            // ★★★ 评价模块（含图片上传） ★★★
             // ============================================================
+
+            // 获取评价图片上传预签名URL
+            if (path === '/reviews/upload-url' && method === 'POST') {
+                const body = await request.json();
+                const { userId, filename, contentType } = body;
+                if (!userId || !filename) {
+                    return new Response(JSON.stringify({ error: '缺少参数' }), {
+                        status: 400,
+                        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+                    });
+                }
+
+                // 生成唯一文件名
+                const ext = filename.split('.').pop() || 'jpg';
+                const key = `reviews/${userId}/${Date.now()}_${Math.random().toString(36).slice(2, 8)}.${ext}`;
+
+                // 生成R2预签名URL（使用 Workers 的 R2 绑定）
+                // 注意：需要在 wrangler.toml 中配置 R2 绑定: [[r2_buckets]] binding = "BUCKET" bucket_name = "yizaoxian"
+                let uploadUrl = '';
+                let publicUrl = '';
+
+                if (env.BUCKET) {
+                    try {
+                        // 使用 R2 预签名 URL（有效期 5 分钟）
+                        const urlObj = await env.BUCKET.createPresignedUrl(key, {
+                            expiry: 300,
+                            method: 'PUT',
+                            // 限制文件类型和大小
+                            headers: {
+                                'Content-Type': contentType || 'image/jpeg',
+                            },
+                        });
+                        uploadUrl = urlObj.toString();
+                        // 构造公开访问 URL（如果桶是公共读的）
+                        publicUrl = `https://yizaoxian.${env.BUCKET.domain}/` + key;
+                    } catch (e) {
+                        console.error('生成预签名URL失败:', e);
+                        return new Response(JSON.stringify({ error: '生成上传链接失败' }), {
+                            status: 500,
+                            headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+                        });
+                    }
+                } else {
+                    // 如果 R2 未配置，返回模拟 URL（用于测试）
+                    console.warn('R2未配置，使用模拟URL');
+                    uploadUrl = 'https://mock-r2.example.com/' + key;
+                    publicUrl = 'https://mock-r2.example.com/' + key;
+                }
+
+                return new Response(JSON.stringify({
+                    success: true,
+                    uploadUrl: uploadUrl,
+                    publicUrl: publicUrl,
+                    key: key
+                }), {
+                    headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+                });
+            }
+
+            // 提交评价（含图片URL数组）
             if (path === '/reviews' && method === 'POST') {
                 const body = await request.json();
                 const { orderId, productId, userId, rating, content, images, tags } = body;
@@ -697,6 +756,7 @@ export default {
                 });
             }
 
+            // 获取商品评价列表（含图片）
             if (path === '/reviews/product' && method === 'GET') {
                 const productId = url.searchParams.get('productId');
                 const sort = url.searchParams.get('sort') || 'newest';
@@ -732,6 +792,16 @@ export default {
 
                 const result = await env.DB.prepare(query).bind(...params).all();
 
+                // 解析图片 JSON
+                const reviews = result.results.map(r => {
+                    try {
+                        r.images = JSON.parse(r.images || '[]');
+                    } catch(e) {
+                        r.images = [];
+                    }
+                    return r;
+                });
+
                 const stats = await env.DB.prepare(
                     `SELECT COUNT(*) as total, COALESCE(AVG(rating), 0) as avg_rating,
                      COUNT(CASE WHEN rating >= 4 THEN 1 END) as positive,
@@ -751,7 +821,7 @@ export default {
                 ).bind(productId).all();
 
                 return new Response(JSON.stringify({
-                    reviews: result.results,
+                    reviews: reviews,
                     stats: stats || { total: 0, avg_rating: 0, positive: 0, rating_1: 0, rating_2: 0, rating_3: 0, rating_4: 0, rating_5: 0 },
                     tags: tagsResult.results || [],
                     page: page,
@@ -763,7 +833,7 @@ export default {
                 });
             }
 
-            // ★★★ 新增：获取所有评价（管理员使用） ★★★
+            // 获取所有评价（管理员）
             if (path === '/reviews/all' && method === 'GET') {
                 const result = await env.DB.prepare(
                     `SELECT r.*, u.phone as user_phone, p.name as product_name, p.emoji as product_emoji
@@ -772,7 +842,16 @@ export default {
                      JOIN products p ON r.product_id = p.id
                      ORDER BY r.created_at DESC LIMIT 100`
                 ).all();
-                return new Response(JSON.stringify(result.results || []), {
+                // 解析图片 JSON
+                const reviews = result.results.map(r => {
+                    try {
+                        r.images = JSON.parse(r.images || '[]');
+                    } catch(e) {
+                        r.images = [];
+                    }
+                    return r;
+                });
+                return new Response(JSON.stringify(reviews), {
                     headers: { ...corsHeaders, 'Content-Type': 'application/json' }
                 });
             }
@@ -815,6 +894,104 @@ export default {
                 ).bind('rl_' + Date.now().toString(36), reviewId, userId, new Date().toISOString()).run();
                 await env.DB.prepare('UPDATE reviews SET likes = likes + 1 WHERE id = ?').bind(reviewId).run();
                 return new Response(JSON.stringify({ success: true, action: 'liked' }), {
+                    headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+                });
+            }
+
+            // ============================================================
+            // ★★★ 地区数据（动态加载） ★★★
+            // ============================================================
+            if (path === '/regions' && method === 'GET') {
+                const parentId = url.searchParams.get('parentId') || '';
+                const level = url.searchParams.get('level');
+
+                let query = 'SELECT id, name, level, code FROM regions WHERE parent_id = ?';
+                let params = [parentId];
+
+                if (level) {
+                    query += ' AND level = ?';
+                    params.push(parseInt(level));
+                }
+
+                query += ' ORDER BY name';
+                const result = await env.DB.prepare(query).bind(...params).all();
+                return new Response(JSON.stringify(result.results || []), {
+                    headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+                });
+            }
+
+            // 同步地区数据（从高德API）
+            if (path === '/regions/sync' && method === 'POST') {
+                const body = await request.json();
+                const { keyword } = body;
+                if (!keyword) {
+                    return new Response(JSON.stringify({ error: '缺少关键词' }), {
+                        status: 400,
+                        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+                    });
+                }
+
+                // 调用高德地区查询API
+                const amapKey = env.AMAP_KEY || (window?.__ENV__?.AMAP_KEY) || '';
+                if (!amapKey) {
+                    return new Response(JSON.stringify({ error: '高德地图Key未配置' }), {
+                        status: 500,
+                        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+                    });
+                }
+
+                const response = await fetch(
+                    `https://restapi.amap.com/v3/config/district?keywords=${encodeURIComponent(keyword)}&subdistrict=3&key=${amapKey}&extensions=base`
+                );
+
+                const data = await response.json();
+                if (data.status !== '1') {
+                    return new Response(JSON.stringify({ error: '同步失败: ' + (data.info || '未知错误') }), {
+                        status: 500,
+                        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+                    });
+                }
+
+                // 递归插入地区数据
+                const districts = data.districts || [];
+                let insertedCount = 0;
+                let skippedCount = 0;
+
+                async function insertRegion(district, parentId, level) {
+                    // 检查是否已存在
+                    const existing = await env.DB.prepare('SELECT id FROM regions WHERE name = ? AND parent_id = ? AND level = ?')
+                        .bind(district.name, parentId, level).first();
+                    if (existing) {
+                        skippedCount++;
+                        return;
+                    }
+
+                    const id = 'reg_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 6);
+                    await env.DB.prepare(
+                        `INSERT INTO regions (id, parent_id, name, level, code, created_at)
+                         VALUES (?, ?, ?, ?, ?, ?)`
+                    ).bind(id, parentId, district.name, level, district.adcode || '', new Date().toISOString()).run();
+                    insertedCount++;
+
+                    // 处理子地区
+                    if (district.districts && district.districts.length > 0) {
+                        for (const sub of district.districts) {
+                            await insertRegion(sub, id, level + 1);
+                        }
+                    }
+                }
+
+                for (const d of districts) {
+                    await insertRegion(d, '', 1);
+                }
+
+                return new Response(JSON.stringify({
+                    success: true,
+                    inserted: insertedCount,
+                    skipped: skippedCount,
+                    total: districts.length,
+                    message: `同步完成，新增 ${insertedCount} 条，跳过 ${skippedCount} 条`
+                }), {
                     headers: { ...corsHeaders, 'Content-Type': 'application/json' }
                 });
             }
@@ -993,7 +1170,6 @@ export default {
                 });
             }
 
-            // ★★★ 修改：允许无 userId 获取全部售后（管理员用） ★★★
             if (path === '/after-sales' && method === 'GET') {
                 const userId = url.searchParams.get('userId');
                 if (userId) {
@@ -1002,7 +1178,6 @@ export default {
                         headers: { ...corsHeaders, 'Content-Type': 'application/json' }
                     });
                 } else {
-                    // 管理员查看所有售后
                     const result = await env.DB.prepare('SELECT * FROM after_sales ORDER BY created_at DESC LIMIT 100').all();
                     return new Response(JSON.stringify(result.results), {
                         headers: { ...corsHeaders, 'Content-Type': 'application/json' }
@@ -1115,6 +1290,7 @@ export default {
                 const inventoryLogs = await env.DB.prepare('SELECT * FROM inventory_logs').all();
                 const financeRecords = await env.DB.prepare('SELECT * FROM finance_records').all();
                 const admins = await env.DB.prepare('SELECT id, username, permissions, created_at FROM admins').all();
+                const regions = await env.DB.prepare('SELECT * FROM regions').all();
 
                 const backupData = {
                     users: users.results,
@@ -1133,6 +1309,7 @@ export default {
                     inventoryLogs: inventoryLogs.results,
                     financeRecords: financeRecords.results,
                     admins: admins.results,
+                    regions: regions.results,
                     exportedAt: new Date().toISOString()
                 };
 
@@ -1166,6 +1343,7 @@ export default {
                 await env.DB.prepare('DELETE FROM admins').run();
                 await env.DB.prepare('DELETE FROM inventory_logs').run();
                 await env.DB.prepare('DELETE FROM finance_records').run();
+                await env.DB.prepare('DELETE FROM regions').run();
 
                 for (const item of data.users || []) {
                     await env.DB.prepare(
@@ -1218,6 +1396,12 @@ export default {
                         `INSERT INTO admins (id, username, password, permissions, created_at)
                          VALUES (?, ?, ?, ?, ?)`
                     ).bind(admin.id, admin.username, admin.password, admin.permissions || '[]', admin.created_at).run();
+                }
+                for (const r of data.regions || []) {
+                    await env.DB.prepare(
+                        `INSERT INTO regions (id, parent_id, name, level, code, created_at)
+                         VALUES (?, ?, ?, ?, ?, ?)`
+                    ).bind(r.id, r.parent_id || '', r.name, r.level, r.code || '', r.created_at).run();
                 }
                 return new Response(JSON.stringify({ success: true, message: '导入成功' }), {
                     headers: { ...corsHeaders, 'Content-Type': 'application/json' }

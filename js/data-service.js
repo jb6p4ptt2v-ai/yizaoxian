@@ -1,6 +1,6 @@
 /**
  * 数据服务层 - 调用 Cloudflare Workers API
- * 完整版 v4.0 - 含所有新功能接口
+ * 完整版 v5.0 - 含评价图片上传、地区动态加载、商品规格
  */
 window.DataService = {
     _getApiBase: function() {
@@ -106,7 +106,7 @@ window.DataService = {
     },
 
     // ================================================================
-    // 商品模块（含已售、产地、评价统计）
+    // 商品模块（含已售、产地、评价统计、图片）
     // ================================================================
     getProducts: function() {
         return this._request('/products', 'GET');
@@ -205,8 +205,34 @@ window.DataService = {
     },
 
     // ================================================================
-    // 评价模块
+    // 评价模块（含图片上传）
     // ================================================================
+
+    // 获取图片上传预签名URL
+    getReviewUploadUrl: function(userId, filename, contentType) {
+        return this._request('/reviews/upload-url', 'POST', {
+            userId: userId,
+            filename: filename,
+            contentType: contentType || 'image/jpeg'
+        });
+    },
+
+    // 上传图片到R2（通过预签名URL）
+    uploadReviewImage: function(uploadUrl, file) {
+        return fetch(uploadUrl, {
+            method: 'PUT',
+            body: file,
+            headers: {
+                'Content-Type': file.type || 'image/jpeg'
+            }
+        }).then(function(res) {
+            if (!res.ok) {
+                throw new Error('上传失败: ' + res.status);
+            }
+            return true;
+        });
+    },
+
     submitReview: function(orderId, productId, userId, rating, content, images, tags) {
         return this._request('/reviews', 'POST', {
             orderId: orderId,
@@ -238,6 +264,19 @@ window.DataService = {
 
     likeReview: function(reviewId, userId) {
         return this._request('/reviews/like', 'POST', { reviewId: reviewId, userId: userId });
+    },
+
+    // ================================================================
+    // ★★★ 地区数据（动态加载） ★★★
+    // ================================================================
+    getRegions: function(parentId, level) {
+        var params = '?parentId=' + (parentId || '');
+        if (level) params += '&level=' + level;
+        return this._request('/regions' + params, 'GET');
+    },
+
+    syncRegions: function(keyword) {
+        return this._request('/regions/sync', 'POST', { keyword: keyword });
     },
 
     // ================================================================

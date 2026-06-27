@@ -14,6 +14,7 @@ window.AdminPages = {
             case 'backup': this.renderBackup(); break;
             case 'profile': this.renderProfile(); break;
             case 'members': this.renderMembers(); break;
+            case 'regions': this.renderRegions(); break;
         }
     },
 
@@ -237,7 +238,7 @@ window.AdminPages = {
     },
 
     // ================================================================
-    // 商品管理
+    // ★★★ 商品管理（含规格管理、图片管理） ★★★
     // ================================================================
     renderProducts: function() {
         var el = document.getElementById('admin-products');
@@ -257,18 +258,27 @@ window.AdminPages = {
             if (!list.length) {
                 html += '<div class="empty-state"><div class="empty-icon">📦</div><p>暂无商品</p></div>';
             } else {
-                html += '<table class="admin-table"><thead><tr><th>名称</th><th>分类</th><th>价格</th><th>库存</th><th>已售</th><th>产地</th><th>供应商</th><th>🔥</th><th>今日可提</th><th>操作</th></tr></thead><tbody>';
+                html += '<table class="admin-table"><thead><tr><th>名称</th><th>分类</th><th>价格</th><th>库存</th><th>已售</th><th>产地</th><th>供应商</th><th>🔥</th><th>今日可提</th><th>规格</th><th>操作</th></tr></thead><tbody>';
                 list.forEach(function(p) {
                     if (!p) return;
+                    var specCount = p._specCount || 0;
                     html += '<tr><td>' + (p.emoji || '🥬') + ' ' + (p.name || '') + '</td><td>' + (p.category || '-') + '</td><td>' + Utils.formatPrice(p.price || 0) + '</td><td>' + (p.stock || 0) + '</td><td>' + (p.sales_count || 0) + '</td><td>' + (p.origin || '-') + '</td><td>' + (supMap[p.supplier_id] || '-') + '</td>' +
                         '<td>' + (p.is_hot ? '🔥' : '') + '</td>' +
                         '<td>' + (p.today_pickup ? '✅' : '') + '</td>' +
+                        '<td>' + (specCount > 0 ? specCount + '种' : '—') + '</td>' +
                         '<td><div class="actions"><button class="primary" onclick="AdminPages.openProductModal(\'' + p.id + '\')">编辑</button><button class="danger" onclick="AdminPages.deleteProduct(\'' + p.id + '\')">删除</button></div></td></tr>';
                 });
                 html += '</tbody></table>';
             }
             html += '</div>';
             el.innerHTML = html;
+
+            // 加载规格数量
+            list.forEach(function(p) {
+                DataService.getProductSpecs(p.id).then(function(specs) {
+                    p._specCount = specs ? specs.length : 0;
+                }).catch(function() {});
+            });
         }).catch(function(err) {
             el.innerHTML = '<div class="admin-card"><div class="card-title">商品管理</div><p>加载失败: ' + err.message + '</p></div>';
         });
@@ -288,6 +298,9 @@ window.AdminPages = {
         promise.then(function(data) {
             var isEdit = !!data;
             var html = '<div class="modal-title">' + (isEdit ? '编辑商品' : '添加商品') + '</div>';
+
+            // 基本信息
+            html += '<div style="border-bottom:2px solid var(--primary);padding-bottom:8px;margin-bottom:12px;font-weight:500;">📦 基本信息</div>';
 
             html += '<div class="form-group"><label>商品名称 *</label><input id="f_prod_name" value="' + (data ? data.name : '') + '" placeholder="如：有机小白菜"></div>';
 
@@ -321,6 +334,51 @@ window.AdminPages = {
 
             html += '<div class="form-group"><label>今日可提</label><input type="checkbox" id="f_prod_today" ' + (data && data.today_pickup !== 0 ? 'checked' : '') + '> ✅ 今日可提</div>';
 
+            // ★★★ 图片管理 ★★★
+            html += '<div style="border-bottom:2px solid var(--primary);padding-bottom:8px;margin:16px 0 12px;font-weight:500;">🖼️ 商品图片</div>';
+            html += '<div id="productImageList" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px;">';
+            if (data && data.images) {
+                try {
+                    var images = JSON.parse(data.images);
+                    if (Array.isArray(images) && images.length > 0) {
+                        images.forEach(function(img) {
+                            html += '<div style="position:relative;width:72px;height:72px;border-radius:6px;overflow:hidden;border:1px solid #ddd;">' +
+                                '<img src="' + img + '" style="width:100%;height:100%;object-fit:cover;" onerror="this.style.display=\'none\'">' +
+                                '</div>';
+                        });
+                    } else {
+                        html += '<span style="color:#999;font-size:13px;">暂无图片</span>';
+                    }
+                } catch(e) {
+                    html += '<span style="color:#999;font-size:13px;">暂无图片</span>';
+                }
+            } else {
+                html += '<span style="color:#999;font-size:13px;">暂无图片</span>';
+            }
+            html += '</div>';
+            html += '<div style="display:flex;gap:8px;flex-wrap:wrap;">' +
+                '<label style="background:var(--primary);color:#fff;padding:4px 16px;border-radius:6px;cursor:pointer;font-size:12px;">📷 上传图片<input type="file" accept="image/*" multiple onchange="AdminPages._handleProductImages(event, \'' + (data ? data.id : '') + '\')" style="display:none;"></label>' +
+                '<span style="font-size:11px;color:#999;">支持多张，每张不超过5MB</span>' +
+                '</div>';
+
+            // ★★★ 规格管理 ★★★
+            html += '<div style="border-bottom:2px solid var(--primary);padding-bottom:8px;margin:16px 0 12px;font-weight:500;">📐 规格管理</div>';
+            html += '<div id="specList" style="margin-bottom:8px;">';
+            html += '<div style="display:flex;gap:8px;flex-wrap:wrap;font-size:13px;color:#666;">';
+            if (id) {
+                // 异步加载规格
+                html += '<span id="specLoading">加载规格中...</span>';
+            } else {
+                html += '<span style="color:#999;">请先保存商品后再添加规格</span>';
+            }
+            html += '</div></div>';
+            html += '<div id="specAddArea" style="display:' + (id ? 'flex' : 'none') + ';gap:6px;flex-wrap:wrap;align-items:center;">' +
+                '<input id="f_spec_name" placeholder="规格名(如:大份)" style="width:120px;padding:4px 8px;border:1px solid #ddd;border-radius:4px;font-size:13px;">' +
+                '<input id="f_spec_price" placeholder="价格" type="number" step="0.01" style="width:80px;padding:4px 8px;border:1px solid #ddd;border-radius:4px;font-size:13px;">' +
+                '<input id="f_spec_stock" placeholder="库存" type="number" style="width:60px;padding:4px 8px;border:1px solid #ddd;border-radius:4px;font-size:13px;">' +
+                '<button class="btn-sm" onclick="AdminPages.addSpec(\'' + (data ? data.id : '') + '\')" style="background:var(--primary);color:#fff;padding:4px 12px;border-radius:4px;">添加</button>' +
+                '</div>';
+
             html += '<div class="form-actions"><button class="btn-cancel" onclick="window.closeModal()">取消</button><button class="btn-submit" onclick="AdminPages.saveProduct(\'' + (id || '') + '\')">保存</button></div>';
 
             var content = document.getElementById('modalContent');
@@ -328,6 +386,7 @@ window.AdminPages = {
             var overlay = document.getElementById('modalOverlay');
             if (overlay) overlay.classList.add('active');
 
+            // 加载供应商列表
             DataService.getSuppliers().then(function(suppliers) {
                 var sel = document.getElementById('f_prod_supplier');
                 if (!sel) return;
@@ -342,7 +401,76 @@ window.AdminPages = {
                     sel.appendChild(opt);
                 });
             });
+
+            // 加载规格列表
+            if (id) {
+                DataService.getProductSpecs(id).then(function(specs) {
+                    self._renderSpecList(specs, id);
+                }).catch(function() {
+                    document.getElementById('specLoading').textContent = '加载失败';
+                });
+            }
         });
+    },
+
+    _renderSpecList: function(specs, productId) {
+        var container = document.getElementById('specList');
+        if (!container) return;
+        if (!specs || specs.length === 0) {
+            container.innerHTML = '<span style="color:#999;font-size:13px;">暂无规格</span>';
+            document.getElementById('specAddArea').style.display = 'flex';
+            return;
+        }
+        var html = '<div style="display:flex;flex-direction:column;gap:4px;">';
+        specs.forEach(function(s) {
+            html += '<div style="display:flex;justify-content:space-between;align-items:center;padding:4px 8px;background:#f8f9fa;border-radius:4px;font-size:13px;">' +
+                '<span><strong>' + s.spec_name + '</strong> ¥' + s.price.toFixed(2) + ' 库存' + s.stock + '</span>' +
+                '<button class="danger" onclick="AdminPages.deleteSpec(\'' + s.id + '\', \'' + productId + '\')" style="font-size:11px;padding:2px 10px;border-radius:10px;background:#ff3b30;color:#fff;border:none;cursor:pointer;">删除</button>' +
+                '</div>';
+        });
+        html += '</div>';
+        container.innerHTML = html;
+        document.getElementById('specAddArea').style.display = 'flex';
+    },
+
+    addSpec: function(productId) {
+        var name = document.getElementById('f_spec_name').value.trim();
+        var price = parseFloat(document.getElementById('f_spec_price').value);
+        var stock = parseInt(document.getElementById('f_spec_stock').value) || 0;
+        if (!name) { Utils.toast('请输入规格名称'); return; }
+        if (isNaN(price) || price < 0) { Utils.toast('请输入有效价格'); return; }
+        DataService.saveProductSpec(productId, { specName: name, price: price, stock: stock })
+            .then(function(result) {
+                Utils.toast('✅ 规格已添加');
+                document.getElementById('f_spec_name').value = '';
+                document.getElementById('f_spec_price').value = '';
+                document.getElementById('f_spec_stock').value = '';
+                DataService.getProductSpecs(productId).then(function(specs) {
+                    AdminPages._renderSpecList(specs, productId);
+                });
+            })
+            .catch(function(err) {
+                Utils.toast('添加失败: ' + err.message);
+            });
+    },
+
+    deleteSpec: function(specId, productId) {
+        if (!confirm('确定删除该规格吗？')) return;
+        DataService.deleteProductSpec(specId)
+            .then(function() {
+                Utils.toast('已删除');
+                DataService.getProductSpecs(productId).then(function(specs) {
+                    AdminPages._renderSpecList(specs, productId);
+                });
+            })
+            .catch(function(err) {
+                Utils.toast('删除失败: ' + err.message);
+            });
+    },
+
+    _handleProductImages: function(event, productId) {
+        Utils.toast('图片上传功能开发中，请使用R2存储');
+        event.target.value = '';
     },
 
     saveProduct: function(id) {
@@ -669,14 +797,16 @@ window.AdminPages = {
             if (reviews.length === 0) {
                 html += '<p style="color:var(--text-secondary);">暂无评价</p>';
             } else {
-                html += '<table class="admin-table"><thead><tr><th>商品</th><th>用户</th><th>评分</th><th>评价内容</th><th>标签</th><th>时间</th><th>操作</th></tr></thead><tbody>';
+                html += '<table class="admin-table"><thead><tr><th>商品</th><th>用户</th><th>评分</th><th>评价内容</th><th>图片</th><th>标签</th><th>时间</th><th>操作</th></tr></thead><tbody>';
                 reviews.slice(0, 50).forEach(function(r) {
                     var stars = '';
                     for (var i = 0; i < 5; i++) { stars += i < r.rating ? '★' : '☆'; }
                     var tags = r.tags ? (Array.isArray(r.tags) ? r.tags : JSON.parse(r.tags || '[]')) : [];
                     var tagsHtml = tags.length > 0 ? tags.map(function(t) { return '<span style="font-size:11px;background:#f0f0f0;padding:1px 8px;border-radius:10px;margin:2px;">' + t + '</span>'; }).join('') : '—';
+                    var imgHtml = (r.images && r.images.length > 0) ? '📷' : '—';
                     html += '<tr><td>' + (r.product_emoji || '🥬') + ' ' + (r.product_name || '') + '</td><td>' + (r.user_phone || '用户') + '</td><td style="color:#ff6b00;">' + stars + '</td>' +
-                        '<td style="font-size:12px;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + (r.content || '') + '</td>' +
+                        '<td style="font-size:12px;max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + (r.content || '') + '</td>' +
+                        '<td>' + imgHtml + '</td>' +
                         '<td>' + tagsHtml + '</td>' +
                         '<td style="font-size:12px;">' + (r.created_at || '').slice(0, 16) + '</td>' +
                         '<td><div class="actions">' +
@@ -912,6 +1042,51 @@ window.AdminPages = {
     },
 
     // ================================================================
+    // ★★★ 地区数据管理（动态同步） ★★★
+    // ================================================================
+    renderRegions: function() {
+        var el = document.getElementById('admin-regions');
+        if (!el) return;
+        if (!this._hasPermission('regions')) {
+            el.innerHTML = '<div class="admin-card"><p>您没有权限访问此页面</p></div>';
+            return;
+        }
+
+        el.innerHTML = '<div class="admin-card"><div class="card-title">🗺️ 地区数据管理</div>' +
+            '<p style="color:var(--text-secondary);font-size:13px;">从高德地图同步全国行政区划数据，确保地区下拉框完整。</p>' +
+            '<div style="display:flex;gap:12px;flex-wrap:wrap;margin:12px 0;">' +
+            '<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">' +
+            '<input id="regionSyncKeyword" placeholder="输入省份/城市名称" style="width:200px;padding:6px 12px;border:1px solid #ddd;border-radius:6px;font-size:13px;">' +
+            '<button onclick="AdminPages.syncRegions()" style="background:var(--primary);color:#fff;padding:6px 20px;border:none;border-radius:6px;cursor:pointer;">📥 同步</button>' +
+            '</div>' +
+            '</div>' +
+            '<div id="syncResult" style="margin-top:8px;font-size:13px;"></div>' +
+            '<div style="margin-top:12px;font-size:12px;color:#999;">💡 提示：输入"湖北省"可同步全省数据，输入"宜昌市"可同步全市数据</div>' +
+            '</div>';
+    },
+
+    syncRegions: function() {
+        var keyword = document.getElementById('regionSyncKeyword').value.trim();
+        if (!keyword) { Utils.toast('请输入关键词'); return; }
+        var resultEl = document.getElementById('syncResult');
+        resultEl.innerHTML = '⏳ 同步中...';
+        DataService.syncRegions(keyword)
+            .then(function(result) {
+                if (result.success) {
+                    resultEl.innerHTML = '✅ 同步完成！新增 ' + result.inserted + ' 条，跳过 ' + result.skipped + ' 条';
+                    Utils.toast('✅ 地区数据同步成功');
+                } else {
+                    resultEl.innerHTML = '❌ 同步失败: ' + (result.error || '未知错误');
+                    Utils.toast('同步失败: ' + (result.error || '未知错误'));
+                }
+            })
+            .catch(function(err) {
+                resultEl.innerHTML = '❌ 同步失败: ' + err.message;
+                Utils.toast('同步失败: ' + err.message);
+            });
+    },
+
+    // ================================================================
     // 备份管理
     // ================================================================
     renderBackup: function() {
@@ -928,7 +1103,7 @@ window.AdminPages = {
             '<label style="background:var(--bg);padding:8px 24px;border-radius:8px;cursor:pointer;">📥 导入备份<input type="file" accept=".json" onchange="AdminBackup.importBackup(event)" style="display:none;"></label>' +
             '</div>' +
             '<p style="color:var(--text-secondary);font-size:13px;margin-top:12px;">💡 自动备份时间：每天 ' + (CONFIG.BACKUP?.hour || 3) + ':' + (CONFIG.BACKUP?.minute || 0).toString().padStart(2, '0') + '</p>' +
-            '<p style="color:#999;font-size:12px;">备份包含：用户、地址、供应商、商品、规格、订单、物流、评价、收藏、优惠券、消息、售后、库存记录、财务记录</p>' +
+            '<p style="color:#999;font-size:12px;">备份包含：用户、地址、供应商、商品、规格、订单、物流、评价、收藏、优惠券、消息、售后、库存记录、财务记录、地区数据</p>' +
             '</div>';
     },
 
@@ -1019,7 +1194,7 @@ window.AdminPages = {
             Utils.toast('密码至少6位');
             return;
         }
-        var perms = prompt('权限列表（用逗号分隔，如：dashboard,suppliers,products,reviews,after_sales,coupons,messages）：') || '';
+        var perms = prompt('权限列表（用逗号分隔，如：dashboard,suppliers,products,reviews,after_sales,coupons,messages,regions）：') || '';
         var permArr = perms.split(',').map(function(s) { return s.trim(); }).filter(function(s) { return s; });
         DataService.addAdminMember(username, password, permArr)
             .then(function() {

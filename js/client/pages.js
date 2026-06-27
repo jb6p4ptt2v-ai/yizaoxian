@@ -9,7 +9,13 @@ window.ClientPages = {
     _currentProductId: null,
     _searchKeyword: '',
     _searchSort: 'relevance',
+    _selectedSpec: {},
+    _uploadedImages: [],
+    _maxImages: 6,
 
+    // ================================================================
+    // 初始化
+    // ================================================================
     init: function(app) {
         this.app = app;
         if (window.RegionData && window.RegionData.init) {
@@ -19,6 +25,9 @@ window.ClientPages = {
         this.loadUnreadCount();
     },
 
+    // ================================================================
+    // 商品展示
+    // ================================================================
     renderProducts: function() {
         var self = this;
         var grid = document.getElementById('productGrid');
@@ -108,6 +117,9 @@ window.ClientPages = {
         });
     },
 
+    // ================================================================
+    // 分类筛选
+    // ================================================================
     filterByCategory: function(cat) {
         this.currentCategory = cat;
         document.querySelectorAll('#clientApp .category-tabs .cat-tab').forEach(function(t) {
@@ -116,6 +128,9 @@ window.ClientPages = {
         this.renderProducts();
     },
 
+    // ================================================================
+    // 搜索
+    // ================================================================
     filterProducts: function() {
         this.renderProducts();
     },
@@ -169,7 +184,55 @@ window.ClientPages = {
         }).catch(function() {});
     },
 
-    addToCart: function(productId) {
+    // ================================================================
+    // 购物车
+    // ================================================================
+    addToCart: function(productId, specId) {
+        var self = this;
+        DataService.getProducts().then(function(products) {
+            if (!Array.isArray(products)) products = [];
+            var product = products.find(function(p) { return p.id === productId; });
+            if (!product || (product.stock || 0) <= 0) {
+                Utils.toast('该商品暂无库存');
+                return;
+            }
+
+            var cart = DataService.getCart();
+            if (!cart) cart = {};
+
+            // 如果指定了规格，检查规格库存
+            if (specId) {
+                DataService.getProductSpecs(productId).then(function(specs) {
+                    if (!Array.isArray(specs)) specs = [];
+                    var spec = specs.find(function(s) { return s.id === specId; });
+                    if (!spec || spec.stock <= 0) {
+                        Utils.toast('该规格暂无库存');
+                        return;
+                    }
+                    var cartKey = productId + '_' + specId;
+                    if (!cart[cartKey]) cart[cartKey] = 0;
+                    if (cart[cartKey] >= spec.stock) {
+                        Utils.toast('库存不足');
+                        return;
+                    }
+                    cart[cartKey] = (cart[cartKey] || 0) + 1;
+                    DataService.saveCart(cart);
+                    if (window.ClientApp) window.ClientApp.updateBadges();
+                    window.ClientPages.renderProducts();
+                    Utils.toast('已添加 ' + (product.name || '商品') + ' (' + spec.spec_name + ')');
+                }).catch(function() {
+                    // 无规格，按原逻辑
+                    self._addToCartSimple(productId);
+                });
+                return;
+            }
+
+            // 无规格，原逻辑
+            self._addToCartSimple(productId);
+        });
+    },
+
+    _addToCartSimple: function(productId) {
         DataService.getProducts().then(function(products) {
             if (!Array.isArray(products)) products = [];
             var product = products.find(function(p) { return p.id === productId; });
@@ -192,12 +255,12 @@ window.ClientPages = {
         });
     },
 
-    removeFromCart: function(productId) {
+    removeFromCart: function(cartKey) {
         var cart = DataService.getCart();
         if (!cart) cart = {};
-        if (cart[productId]) {
-            cart[productId]--;
-            if (cart[productId] <= 0) delete cart[productId];
+        if (cart[cartKey]) {
+            cart[cartKey]--;
+            if (cart[cartKey] <= 0) delete cart[cartKey];
             DataService.saveCart(cart);
             if (window.ClientApp) window.ClientApp.updateBadges();
             window.ClientPages.renderCart();
@@ -213,9 +276,9 @@ window.ClientPages = {
 
         var cart = DataService.getCart();
         if (!cart) cart = {};
-        var ids = Object.keys(cart);
+        var keys = Object.keys(cart);
 
-        if (!ids.length) {
+        if (!keys.length) {
             list.innerHTML = '';
             empty.style.display = 'block';
             footer.classList.add('hidden');
@@ -228,24 +291,37 @@ window.ClientPages = {
             var total = 0;
             var invalidItems = [];
 
-            ids.forEach(function(id) {
-                var p = products.find(function(pr) { return pr.id === id; });
-                if (p && cart[id] > 0) {
+            keys.forEach(function(key) {
+                var parts = key.split('_');
+                var productId = parts[0];
+                var specId = parts[1] || null;
+                var p = products.find(function(pr) { return pr.id === productId; });
+                if (p && cart[key] > 0) {
                     if ((p.stock || 0) <= 0) {
-                        invalidItems.push({ id: id, name: p.name || '已失效商品', qty: cart[id] });
+                        invalidItems.push({ key: key, name: p.name || '已失效商品', qty: cart[key] });
                     } else {
+                        var specName = '';
+                        if (specId) {
+                            DataService.getProductSpecs(productId).then(function(specs) {
+                                var spec = specs.find(function(s) { return s.id === specId; });
+                                if (spec) specName = ' (' + spec.spec_name + ')';
+                            });
+                        }
                         items.push({
-                            id: p.id,
+                            key: key,
+                            id: productId,
+                            specId: specId,
                             name: p.name || '未命名',
+                            specName: specName,
                             price: p.price || 0,
-                            qty: cart[id],
+                            qty: cart[key],
                             emoji: p.emoji || '🥬',
                             stock: p.stock || 0
                         });
-                        total += p.price * cart[id];
+                        total += p.price * cart[key];
                     }
                 } else {
-                    invalidItems.push({ id: id, name: '商品已下架', qty: cart[id] });
+                    invalidItems.push({ key: key, name: '商品已下架', qty: cart[key] });
                 }
             });
 
@@ -268,7 +344,7 @@ window.ClientPages = {
                 invalidItems.forEach(function(item) {
                     html += '<div style="display:flex;justify-content:space-between;align-items:center;padding:4px 0;font-size:13px;">' +
                         '<span style="color:#999;">' + item.name + ' × ' + item.qty + '</span>' +
-                        '<button onclick="ClientPages.removeFromCart(\'' + item.id + '\')" style="color:#ff3b30;background:none;border:none;font-size:12px;cursor:pointer;">移除</button>' +
+                        '<button onclick="ClientPages.removeFromCart(\'' + item.key + '\')" style="color:#ff3b30;background:none;border:none;font-size:12px;cursor:pointer;">移除</button>' +
                         '</div>';
                 });
                 html += '</div>';
@@ -278,19 +354,16 @@ window.ClientPages = {
                 var maxQty = Math.min(item.stock, 99);
                 html += '<div class="cart-item">' +
                     '<div style="font-size:28px;">' + item.emoji + '</div>' +
-                    '<div class="item-info"><div class="item-name">' + item.name + '</div><div class="item-price">' + Utils.formatPrice(item.price) + '</div></div>' +
+                    '<div class="item-info"><div class="item-name">' + item.name + item.specName + '</div><div class="item-price">' + Utils.formatPrice(item.price) + '</div></div>' +
                     '<div class="item-qty">' +
-                    '<button onclick="ClientPages.removeFromCart(\'' + item.id + '\')">−</button>' +
+                    '<button onclick="ClientPages.removeFromCart(\'' + item.key + '\')">−</button>' +
                     '<span class="qty-num">' + item.qty + '</span>' +
-                    '<button onclick="ClientPages.addToCart(\'' + item.id + '\')" ' + (item.qty >= maxQty ? 'disabled style="opacity:0.3;"' : '') + '>+</button>' +
+                    '<button onclick="ClientPages.addToCart(\'' + item.id + '\',\'' + (item.specId || '') + '\')" ' + (item.qty >= maxQty ? 'disabled style="opacity:0.3;"' : '') + '>+</button>' +
                     '</div></div>';
             });
 
             html += '<div style="display:flex;justify-content:space-between;padding:8px 0;font-size:13px;">' +
-                '<label style="display:flex;align-items:center;gap:6px;cursor:pointer;">' +
-                '<input type="checkbox" id="cartSelectAll" checked onchange="ClientPages.toggleCartAll()"> 全选' +
-                '</label>' +
-                '<button onclick="ClientPages.batchRemoveCart()" style="color:#ff3b30;background:none;border:none;font-size:13px;cursor:pointer;">🗑️ 批量删除</button>' +
+                '<button onclick="ClientPages.batchRemoveCart()" style="color:#ff3b30;background:none;border:none;font-size:13px;cursor:pointer;">🗑️ 清空购物车</button>' +
                 '</div>';
 
             list.innerHTML = html;
@@ -305,16 +378,17 @@ window.ClientPages = {
         });
     },
 
-    toggleCartAll: function() {},
-
     batchRemoveCart: function() {
-        if (!confirm('确定移除所有商品吗？')) return;
+        if (!confirm('确定清空购物车吗？')) return;
         DataService.saveCart({});
         if (window.ClientApp) window.ClientApp.updateBadges();
         window.ClientPages.renderCart();
         Utils.toast('已清空购物车');
     },
 
+    // ================================================================
+    // 结算
+    // ================================================================
     showCheckout: function() {
         var self = this;
         if (!Auth.getCurrentUser()) {
@@ -332,8 +406,8 @@ window.ClientPages = {
     _doCheckout: function() {
         var cart = DataService.getCart();
         if (!cart) cart = {};
-        var ids = Object.keys(cart);
-        if (!ids.length) {
+        var keys = Object.keys(cart);
+        if (!keys.length) {
             Utils.toast('购物车是空的');
             return;
         }
@@ -402,8 +476,8 @@ window.ClientPages = {
 
             var cart = DataService.getCart();
             if (!cart) cart = {};
-            var ids = Object.keys(cart);
-            if (!ids.length) {
+            var keys = Object.keys(cart);
+            if (!keys.length) {
                 Utils.toast('购物车是空的');
                 return;
             }
@@ -414,20 +488,24 @@ window.ClientPages = {
                 var total = 0;
                 var stockOk = true;
 
-                ids.forEach(function(id) {
-                    var p = products.find(function(pr) { return pr.id === id; });
-                    if (!p || (p.stock || 0) < cart[id]) {
+                keys.forEach(function(key) {
+                    var parts = key.split('_');
+                    var productId = parts[0];
+                    var specId = parts[1] || null;
+                    var p = products.find(function(pr) { return pr.id === productId; });
+                    if (!p || (p.stock || 0) < cart[key]) {
                         stockOk = false;
-                        Utils.toast('商品 ' + (p ? p.name : id) + ' 库存不足');
+                        Utils.toast('商品 ' + (p ? p.name : key) + ' 库存不足');
                         return;
                     }
                     items.push({
                         productId: p.id,
+                        specId: specId,
                         name: p.name || '未命名',
                         price: p.price || 0,
-                        quantity: cart[id]
+                        quantity: cart[key]
                     });
-                    total += p.price * cart[id];
+                    total += p.price * cart[key];
                 });
 
                 if (!stockOk || !items.length) return;
@@ -499,6 +577,9 @@ window.ClientPages = {
         });
     },
 
+    // ================================================================
+    // 订单列表
+    // ================================================================
     renderOrders: function() {
         var list = document.getElementById('orderList');
         var empty = document.getElementById('orderEmpty');
@@ -537,7 +618,10 @@ window.ClientPages = {
                 if (!o) return '';
                 var itemsHtml = '';
                 if (Array.isArray(o.items)) {
-                    itemsHtml = o.items.map(function(i) { return (i.name || '') + ' × ' + (i.quantity || 0); }).join('、');
+                    itemsHtml = o.items.map(function(i) {
+                        var specText = i.specId ? ' (' + i.specName + ')' : '';
+                        return (i.name || '') + specText + ' × ' + (i.quantity || 0);
+                    }).join('、');
                 }
                 var pickupInfo = o.pickup_code ? ' 🎫 提货码：<strong>' + o.pickup_code + '</strong>' : '';
                 var pickupDate = o.expected_pickup_date ? ' · 📅 ' + o.expected_pickup_date + ' 可提货' : '';
@@ -563,6 +647,9 @@ window.ClientPages = {
         });
     },
 
+    // ================================================================
+    // 订单详情
+    // ================================================================
     showOrderDetail: function(orderId) {
         DataService.getOrderDetail(orderId).then(function(order) {
             if (!order) {
@@ -574,8 +661,9 @@ window.ClientPages = {
             var itemsHtml = '';
             if (Array.isArray(order.items)) {
                 itemsHtml = order.items.map(function(i) {
+                    var specText = i.specId ? ' (' + i.specName + ')' : '';
                     return '<div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid #f5f5f5;font-size:14px;">' +
-                        '<span>' + (i.name || '') + ' × ' + (i.quantity || 0) + '</span>' +
+                        '<span>' + (i.name || '') + specText + ' × ' + (i.quantity || 0) + '</span>' +
                         '<span>' + Utils.formatPrice((i.price || 0) * (i.quantity || 0)) + '</span>' +
                         '</div>';
                 }).join('');
@@ -629,6 +717,9 @@ window.ClientPages = {
         });
     },
 
+    // ================================================================
+    // 订单操作
+    // ================================================================
     cancelOrder: function(id) {
         if (!confirm('确定要取消该订单吗？')) return;
         DataService.updateOrderStatus(id, 'cancelled').then(function() {
@@ -697,12 +788,19 @@ window.ClientPages = {
         this.renderOrders();
     },
 
+    // ================================================================
+    // ★★★ 评价模块（含图片上传） ★★★
+    // ================================================================
     showReviewForm: function(orderId) {
         var user = Auth.getCurrentUser();
         if (!user) {
             Utils.toast('请先登录');
             return;
         }
+
+        var self = this;
+        this._uploadedImages = [];
+        this._selectedSpec = {};
 
         DataService.getOrderDetail(orderId).then(function(order) {
             if (!order || !order.items || order.items.length === 0) {
@@ -715,6 +813,8 @@ window.ClientPages = {
             var html = '<div class="modal-title">✍️ 评价商品</div>';
             html += '<div style="text-align:center;font-size:36px;padding:8px 0;">' + (product.emoji || '🥬') + '</div>';
             html += '<div style="text-align:center;font-weight:500;">' + product.name + '</div>';
+
+            // 评分
             html += '<div style="margin:12px 0;">';
             html += '<label style="display:block;font-size:13px;color:#666;margin-bottom:4px;">评分</label>';
             html += '<div style="display:flex;gap:8px;font-size:28px;" id="ratingStars">';
@@ -727,15 +827,25 @@ window.ClientPages = {
             html += '<input type="hidden" id="reviewRating" value="5">';
             html += '</div>';
 
+            // 评价内容
             html += '<div style="margin:12px 0;">';
             html += '<label style="display:block;font-size:13px;color:#666;margin-bottom:4px;">评价内容</label>';
             html += '<textarea id="reviewContent" rows="4" placeholder="说说您的使用感受..." style="width:100%;padding:8px;border:1px solid #ddd;border-radius:6px;font-size:14px;"></textarea>';
             html += '</div>';
 
+            // ★★★ 图片上传 ★★★
+            html += '<div style="margin:12px 0;">';
+            html += '<label style="display:block;font-size:13px;color:#666;margin-bottom:4px;">上传图片（最多6张）</label>';
+            html += '<div id="reviewImagePreview" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px;"></div>';
+            html += '<label id="uploadBtnLabel" style="display:inline-block;padding:8px 16px;background:var(--primary);color:#fff;border-radius:6px;cursor:pointer;font-size:13px;">📷 选择图片</label>';
+            html += '<input type="file" id="reviewImageInput" accept="image/*" multiple style="display:none;" onchange="ClientPages._handleReviewImages(event)">';
+            html += '<span style="font-size:11px;color:#999;margin-left:8px;">支持 JPG/PNG，每张不超过5MB</span>';
+            html += '</div>';
+
+            // 标签
             html += '<div style="margin:12px 0;">';
             html += '<label style="display:block;font-size:13px;color:#666;margin-bottom:4px;">标签（点击选择）</label>';
             html += '<div style="display:flex;gap:6px;flex-wrap:wrap;" id="reviewTags">';
-            // 在这里直接生成标签HTML
             var tags = ['新鲜', '好吃', '份量足', '性价比高', '包装好', '送货快', '会回购'];
             tags.forEach(function(tag) {
                 html += '<span class="review-tag" onclick="ClientPages._toggleReviewTag(this)" style="padding:4px 12px;border:1px solid #ddd;border-radius:14px;font-size:12px;cursor:pointer;">' + tag + '</span>';
@@ -753,7 +863,7 @@ window.ClientPages = {
             var overlay = document.getElementById('modalOverlay');
             if (overlay) overlay.classList.add('active');
 
-            ClientPages._setRating(5);
+            self._setRating(5);
         }).catch(function(err) {
             Utils.toast('加载订单信息失败: ' + err.message);
         });
@@ -779,6 +889,82 @@ window.ClientPages = {
         }
     },
 
+    _handleReviewImages: function(event) {
+        var files = event.target.files;
+        var self = this;
+
+        for (var i = 0; i < files.length; i++) {
+            if (self._uploadedImages.length >= self._maxImages) {
+                Utils.toast('最多上传 ' + self._maxImages + ' 张图片');
+                break;
+            }
+            var file = files[i];
+            if (!file.type.startsWith('image/')) {
+                Utils.toast('请选择图片文件');
+                continue;
+            }
+            if (file.size > 5 * 1024 * 1024) {
+                Utils.toast('图片不能超过5MB');
+                continue;
+            }
+
+            // 显示缩略图
+            var reader = new FileReader();
+            reader.onload = function(e) {
+                var previewContainer = document.getElementById('reviewImagePreview');
+                if (!previewContainer) return;
+
+                var wrapper = document.createElement('div');
+                wrapper.style.cssText = 'position:relative;width:72px;height:72px;border-radius:6px;overflow:hidden;border:1px solid #ddd;';
+
+                var img = document.createElement('img');
+                img.src = e.target.result;
+                img.style.cssText = 'width:100%;height:100%;object-fit:cover;';
+
+                var removeBtn = document.createElement('button');
+                removeBtn.textContent = '×';
+                removeBtn.style.cssText = 'position:absolute;top:2px;right:2px;width:18px;height:18px;border-radius:50%;border:none;background:#ff3b30;color:#fff;font-size:12px;cursor:pointer;line-height:1;';
+                removeBtn.onclick = function(e) {
+                    e.stopPropagation();
+                    wrapper.remove();
+                    var idx = self._uploadedImages.indexOf(file);
+                    if (idx > -1) self._uploadedImages.splice(idx, 1);
+                };
+
+                wrapper.appendChild(img);
+                wrapper.appendChild(removeBtn);
+                previewContainer.appendChild(wrapper);
+
+                self._uploadedImages.push(file);
+            };
+            reader.readAsDataURL(file);
+        }
+        event.target.value = '';
+    },
+
+    _uploadReviewImages: function(userId) {
+        var self = this;
+        var uploadPromises = [];
+
+        self._uploadedImages.forEach(function(file) {
+            var promise = DataService.getReviewUploadUrl(userId, file.name, file.type)
+                .then(function(result) {
+                    if (result.success && result.uploadUrl) {
+                        return DataService.uploadReviewImage(result.uploadUrl, file)
+                            .then(function() {
+                                return result.publicUrl;
+                            });
+                    }
+                    return null;
+                });
+            uploadPromises.push(promise);
+        });
+
+        return Promise.all(uploadPromises).then(function(urls) {
+            return urls.filter(function(url) { return url; });
+        });
+    },
+
     _submitReview: function(orderId, productId) {
         var user = Auth.getCurrentUser();
         if (!user) {
@@ -798,15 +984,29 @@ window.ClientPages = {
             tags.push(el.textContent.trim());
         });
 
-        DataService.submitReview(orderId, productId, user.id, rating, content, '[]', JSON.stringify(tags)).then(function() {
-            Utils.toast('✅ 评价已提交，感谢您的反馈！');
-            window.closeModal();
-            window.ClientPages.renderOrders();
+        // 上传图片
+        var self = this;
+        Utils.toast('⏳ 上传图片...');
+
+        this._uploadReviewImages(user.id).then(function(imageUrls) {
+            Utils.toast('⏳ 提交评价...');
+            DataService.submitReview(orderId, productId, user.id, rating, content, JSON.stringify(imageUrls), JSON.stringify(tags))
+                .then(function() {
+                    Utils.toast('✅ 评价已提交，感谢您的反馈！');
+                    window.closeModal();
+                    window.ClientPages.renderOrders();
+                })
+                .catch(function(err) {
+                    Utils.toast('评价提交失败: ' + err.message);
+                });
         }).catch(function(err) {
-            Utils.toast('评价提交失败: ' + err.message);
+            Utils.toast('图片上传失败: ' + err.message);
         });
     },
 
+    // ================================================================
+    // ★★★ 商品详情弹窗（含规格选择、图片轮播） ★★★
+    // ================================================================
     showProductDetail: function(productId) {
         var self = this;
         DataService.getProducts().then(function(products) {
@@ -821,60 +1021,143 @@ window.ClientPages = {
             var user = Auth.getCurrentUser();
             var isFavorited = false;
 
-            if (user && user.id) {
-                DataService.getFavorites(user.id).then(function(favorites) {
-                    if (Array.isArray(favorites)) {
-                        isFavorited = favorites.some(function(f) { return f.product_id === productId; });
-                    }
-                    self._renderProductDetail(product, isFavorited);
-                }).catch(function() {
-                    self._renderProductDetail(product, false);
-                });
-            } else {
-                self._renderProductDetail(product, false);
-            }
+            // 加载规格
+            DataService.getProductSpecs(productId).then(function(specs) {
+                if (user && user.id) {
+                    DataService.getFavorites(user.id).then(function(favorites) {
+                        if (Array.isArray(favorites)) {
+                            isFavorited = favorites.some(function(f) { return f.product_id === productId; });
+                        }
+                        self._renderProductDetail(product, specs || [], isFavorited);
+                    }).catch(function() {
+                        self._renderProductDetail(product, specs || [], false);
+                    });
+                } else {
+                    self._renderProductDetail(product, specs || [], false);
+                }
+            }).catch(function() {
+                self._renderProductDetail(product, [], false);
+            });
         }).catch(function(err) {
             Utils.toast('加载商品详情失败: ' + err.message);
         });
     },
 
-    _renderProductDetail: function(product, isFavorited) {
+    _renderProductDetail: function(product, specs, isFavorited) {
         var self = this;
         var stock = product.stock || 0;
         var stockText = stock <= 0 ? '已售罄' : '库存 ' + stock;
         var todayPickupText = product.today_pickup ? ' ✅ 今日可提' : '';
         var hotTag = product.is_hot ? ' 🔥 热卖' : '';
         var cart = DataService.getCart();
-        var inCart = cart[product.id] || 0;
+        var inCart = 0;
         var avgRating = product.avg_rating || 0;
         var reviewCount = product.review_count || 0;
 
-        var html = '<div class="modal-title">' + (product.emoji || '🥬') + ' ' + product.name + '</div>' +
-            '<div style="text-align:center;font-size:56px;padding:8px 0;">' + (product.emoji || '🥬') + '</div>' +
-            '<div style="display:flex;justify-content:space-between;padding:4px 0;"><span>价格</span><span style="font-weight:600;color:#ff3b30;">' + Utils.formatPrice(product.price) + '/' + (product.unit || '份') + '</span></div>' +
-            '<div style="display:flex;justify-content:space-between;padding:4px 0;"><span>库存</span><span>' + stockText + '</span></div>' +
-            '<div style="display:flex;justify-content:space-between;padding:4px 0;"><span>分类</span><span>' + (product.category || '未分类') + '</span></div>' +
-            (product.origin ? '<div style="display:flex;justify-content:space-between;padding:4px 0;"><span>产地</span><span>' + product.origin + '</span></div>' : '') +
-            '<div style="display:flex;justify-content:space-between;padding:4px 0;"><span>已售</span><span>' + (product.sales_count || 0) + ' 件</span></div>' +
-            '<div style="display:flex;justify-content:space-between;padding:4px 0;"><span>状态</span><span>' + todayPickupText + hotTag + '</span></div>' +
-            (product.description ? '<div style="padding:4px 0;color:var(--text-secondary);">📝 ' + product.description + '</div>' : '') +
-            (reviewCount > 0 ? '<div style="padding:4px 0;border-top:1px solid #f0f0f0;margin-top:4px;">⭐ 好评率 ' + (avgRating * 20).toFixed(0) + '%（' + reviewCount + '条评价）</div>' : '') +
-            (inCart > 0 ? '<div style="padding:4px 0;color:var(--primary);">🛒 已选 ' + inCart + ' 份</div>' : '') +
+        // 计算购物车数量
+        for (var key in cart) {
+            if (cart.hasOwnProperty(key)) {
+                var parts = key.split('_');
+                if (parts[0] === product.id) {
+                    inCart += cart[key];
+                }
+            }
+        }
 
-            '<div id="productReviewsPreview" style="margin-top:8px;max-height:150px;overflow-y:auto;border-top:1px solid #f0f0f0;padding-top:8px;"></div>' +
+        // 解析商品图片
+        var images = [];
+        try {
+            images = JSON.parse(product.images || '[]');
+        } catch(e) { images = []; }
 
-            '<div class="form-actions" style="margin-top:12px;">' +
-            '<button class="btn-cancel" onclick="window.closeModal()">关闭</button>' +
-            '<button style="flex:1;padding:10px;border-radius:10px;font-weight:600;background:transparent;color:#ff6b00;border:1px solid #ff6b00;cursor:pointer;" onclick="ClientPages.toggleFavorite(\'' + product.id + '\', this)">' + (isFavorited ? '❤️ 已收藏' : '🤍 收藏') + '</button>' +
-            '<button class="btn-submit" onclick="window.closeModal();ClientPages.addToCart(\'' + product.id + '\')" ' + (stock <= 0 ? 'disabled style="opacity:0.4;"' : '') + '>加入购物车</button>' +
-            '</div>' +
-            (stock > 0 && stock < 10 ? '<div style="text-align:center;font-size:12px;color:#ff3b30;margin-top:4px;">⚠️ 仅剩 ' + stock + ' 份，欲购从速</div>' : '');
+        var html = '<div class="modal-title">' + (product.emoji || '🥬') + ' ' + product.name + '</div>';
+
+        // 图片轮播
+        if (images.length > 0) {
+            html += '<div style="position:relative;overflow:hidden;border-radius:8px;margin-bottom:8px;">';
+            html += '<div id="productImageCarousel" style="display:flex;overflow-x:auto;scroll-snap-type:x mandatory;gap:4px;padding:4px 0;">';
+            images.forEach(function(img) {
+                html += '<div style="flex-shrink:0;width:100%;scroll-snap-align:start;aspect-ratio:1/1;background:#f5f8f5;display:flex;align-items:center;justify-content:center;overflow:hidden;border-radius:6px;">';
+                html += '<img src="' + img + '" style="width:100%;height:100%;object-fit:cover;" onerror="this.style.display=\'none\'">';
+                html += '</div>';
+            });
+            html += '</div>';
+            html += '<div style="display:flex;justify-content:center;gap:6px;padding:4px 0;">';
+            images.forEach(function(img, idx) {
+                html += '<span style="width:6px;height:6px;border-radius:50%;background:' + (idx === 0 ? 'var(--primary)' : '#ddd') + ';"></span>';
+            });
+            html += '</div>';
+            html += '</div>';
+        } else {
+            html += '<div style="text-align:center;font-size:56px;padding:8px 0;">' + (product.emoji || '🥬') + '</div>';
+        }
+
+        // 基本信息
+        html += '<div style="display:flex;justify-content:space-between;padding:4px 0;"><span>价格</span><span style="font-weight:600;color:#ff3b30;">' + Utils.formatPrice(product.price) + '/' + (product.unit || '份') + '</span></div>';
+        html += '<div style="display:flex;justify-content:space-between;padding:4px 0;"><span>库存</span><span>' + stockText + '</span></div>';
+        html += '<div style="display:flex;justify-content:space-between;padding:4px 0;"><span>分类</span><span>' + (product.category || '未分类') + '</span></div>';
+        if (product.origin) {
+            html += '<div style="display:flex;justify-content:space-between;padding:4px 0;"><span>产地</span><span>' + product.origin + '</span></div>';
+        }
+        html += '<div style="display:flex;justify-content:space-between;padding:4px 0;"><span>已售</span><span>' + (product.sales_count || 0) + ' 件</span></div>';
+        html += '<div style="display:flex;justify-content:space-between;padding:4px 0;"><span>状态</span><span>' + todayPickupText + hotTag + '</span></div>';
+        if (product.description) {
+            html += '<div style="padding:4px 0;color:var(--text-secondary);">📝 ' + product.description + '</div>';
+        }
+        if (reviewCount > 0) {
+            html += '<div style="padding:4px 0;border-top:1px solid #f0f0f0;margin-top:4px;">⭐ 好评率 ' + (avgRating * 20).toFixed(0) + '%（' + reviewCount + '条评价）</div>';
+        }
+
+        // ★★★ 规格选择 ★★★
+        if (specs && specs.length > 0) {
+            html += '<div style="margin:8px 0;padding:8px;background:#f8f9fa;border-radius:6px;">';
+            html += '<div style="font-size:13px;font-weight:500;margin-bottom:4px;">选择规格</div>';
+            html += '<div style="display:flex;gap:6px;flex-wrap:wrap;">';
+            specs.forEach(function(spec, idx) {
+                var selected = idx === 0 ? 'style="border-color:var(--primary);background:var(--primary-light);"' : '';
+                var stockClass = spec.stock <= 0 ? ' style="opacity:0.4;cursor:not-allowed;"' : '';
+                html += '<span class="spec-option" data-spec-id="' + spec.id + '" data-price="' + spec.price + '" data-stock="' + spec.stock + '" ' + selected + ' ' + stockClass + ' onclick="ClientPages._selectSpec(this, \'' + spec.id + '\', ' + spec.price + ', ' + spec.stock + ')">' +
+                    spec.spec_name + ' ¥' + spec.price.toFixed(2) + (spec.stock > 0 ? ' (库存' + spec.stock + ')' : ' (已售罄)') +
+                    '</span>';
+            });
+            html += '</div>';
+            html += '</div>';
+            // 存储选中的规格
+            if (specs.length > 0 && specs[0].stock > 0) {
+                html += '<input type="hidden" id="selectedSpecId" value="' + specs[0].id + '">';
+                html += '<input type="hidden" id="selectedSpecPrice" value="' + specs[0].price + '">';
+            } else {
+                html += '<input type="hidden" id="selectedSpecId" value="">';
+                html += '<input type="hidden" id="selectedSpecPrice" value="' + product.price + '">';
+            }
+        } else {
+            html += '<input type="hidden" id="selectedSpecId" value="">';
+            html += '<input type="hidden" id="selectedSpecPrice" value="' + product.price + '">';
+        }
+
+        if (inCart > 0) {
+            html += '<div style="padding:4px 0;color:var(--primary);">🛒 已选 ' + inCart + ' 份</div>';
+        }
+
+        // 评价预览
+        html += '<div id="productReviewsPreview" style="margin-top:8px;max-height:120px;overflow-y:auto;border-top:1px solid #f0f0f0;padding-top:8px;"></div>';
+
+        html += '<div class="form-actions" style="margin-top:12px;">';
+        html += '<button class="btn-cancel" onclick="window.closeModal()">关闭</button>';
+        html += '<button style="flex:1;padding:10px;border-radius:10px;font-weight:600;background:transparent;color:#ff6b00;border:1px solid #ff6b00;cursor:pointer;" onclick="ClientPages.toggleFavorite(\'' + product.id + '\', this)">' + (isFavorited ? '❤️ 已收藏' : '🤍 收藏') + '</button>';
+        var disabled = stock <= 0 ? 'disabled style="opacity:0.4;"' : '';
+        html += '<button class="btn-submit" onclick="ClientPages._addToCartWithSpec(\'' + product.id + '\')" ' + disabled + '>加入购物车</button>';
+        html += '</div>';
+        if (stock > 0 && stock < 10) {
+            html += '<div style="text-align:center;font-size:12px;color:#ff3b30;margin-top:4px;">⚠️ 仅剩 ' + stock + ' 份，欲购从速</div>';
+        }
 
         var content = document.getElementById('modalContent');
         if (content) content.innerHTML = html;
         var overlay = document.getElementById('modalOverlay');
         if (overlay) overlay.classList.add('active');
 
+        // 加载评价预览
         DataService.getProductReviews(product.id, 'latest', null, 1, 3).then(function(result) {
             var container = document.getElementById('productReviewsPreview');
             if (!container) return;
@@ -887,16 +1170,53 @@ window.ClientPages = {
                 for (var i = 0; i < 5; i++) {
                     stars += i < r.rating ? '★' : '☆';
                 }
+                var imgHtml = '';
+                if (r.images && r.images.length > 0) {
+                    imgHtml = ' <span style="font-size:11px;color:#999;">📷</span>';
+                }
                 return '<div style="padding:4px 0;border-bottom:1px solid #f5f5f5;font-size:13px;">' +
                     '<span style="color:#ff6b00;">' + stars + '</span> ' +
                     '<span>' + r.content + '</span>' +
-                    (r.images && r.images !== '[]' ? ' 📷' : '') +
+                    imgHtml +
                     '</div>';
             }).join('');
             container.innerHTML = reviewsHtml;
         }).catch(function() {});
     },
 
+    _selectSpec: function(el, specId, price, stock) {
+        if (stock <= 0) {
+            Utils.toast('该规格已售罄');
+            return;
+        }
+        document.querySelectorAll('.spec-option').forEach(function(opt) {
+            opt.style.borderColor = '#ddd';
+            opt.style.background = 'transparent';
+        });
+        el.style.borderColor = 'var(--primary)';
+        el.style.background = 'var(--primary-light)';
+        document.getElementById('selectedSpecId').value = specId;
+        document.getElementById('selectedSpecPrice').value = price;
+        // 更新显示价格
+        var priceDisplay = document.querySelector('.product-price');
+        if (priceDisplay) {
+            // 不修改主价格，规格价格已在规格按钮上显示
+        }
+    },
+
+    _addToCartWithSpec: function(productId) {
+        var specId = document.getElementById('selectedSpecId') ? document.getElementById('selectedSpecId').value : '';
+        if (specId) {
+            this.addToCart(productId, specId);
+        } else {
+            this.addToCart(productId);
+        }
+        window.closeModal();
+    },
+
+    // ================================================================
+    // 收藏
+    // ================================================================
     toggleFavorite: function(productId, btn) {
         var user = Auth.getCurrentUser();
         if (!user) {
@@ -948,6 +1268,9 @@ window.ClientPages = {
         });
     },
 
+    // ================================================================
+    // 优惠券
+    // ================================================================
     renderCoupons: function() {
         var user = Auth.getCurrentUser();
         DataService.getCoupons(user ? user.id : null).then(function(result) {
@@ -1005,6 +1328,9 @@ window.ClientPages = {
         });
     },
 
+    // ================================================================
+    // 消息
+    // ================================================================
     renderMessages: function() {
         var user = Auth.getCurrentUser();
         if (!user) {
@@ -1051,6 +1377,9 @@ window.ClientPages = {
         }).catch(function() {});
     },
 
+    // ================================================================
+    // 售后
+    // ================================================================
     showAfterSaleForm: function(orderId) {
         var user = Auth.getCurrentUser();
         if (!user) {
@@ -1108,6 +1437,43 @@ window.ClientPages = {
         });
     },
 
+    renderAfterSales: function() {
+        var user = Auth.getCurrentUser();
+        if (!user) {
+            Utils.toast('请先登录');
+            return;
+        }
+        DataService.getAfterSales(user.id).then(function(list) {
+            if (!Array.isArray(list)) list = [];
+            var container = document.getElementById('afterSalesContainer') || document.getElementById('orderList');
+            if (!container) return;
+            if (list.length === 0) {
+                container.innerHTML = '<div class="empty-state"><div class="empty-icon">🔄</div><p>暂无售后记录</p></div>';
+                return;
+            }
+            var statusMap = { pending: '待审核', approved: '已通过', rejected: '已拒绝', completed: '已完成' };
+            var typeMap = { refund: '仅退款', return: '退货退款' };
+            var html = '<div class="admin-card"><div class="card-title">🔄 售后记录</div>';
+            list.forEach(function(a) {
+                html += '<div style="padding:8px 0;border-bottom:1px solid #f5f5f5;">' +
+                    '<div style="display:flex;justify-content:space-between;">' +
+                    '<span>订单: ' + a.order_id + '</span>' +
+                    '<span class="status-badge ' + a.status + '">' + (statusMap[a.status] || a.status) + '</span>' +
+                    '</div>' +
+                    '<div style="font-size:13px;color:#666;">' + (typeMap[a.type] || a.type) + ' - ' + a.reason + '</div>' +
+                    (a.admin_reply ? '<div style="font-size:12px;color:#666;">回复: ' + a.admin_reply + '</div>' : '') +
+                    '</div>';
+            });
+            html += '</div>';
+            container.innerHTML = html;
+        }).catch(function(err) {
+            Utils.toast('加载售后记录失败: ' + err.message);
+        });
+    },
+
+    // ================================================================
+    // 个人中心
+    // ================================================================
     renderProfile: function() {
         var user = Auth.getCurrentUser();
         if (!user) {
@@ -1141,6 +1507,9 @@ window.ClientPages = {
         }.bind(this));
     },
 
+    // ================================================================
+    // 地址管理
+    // ================================================================
     showAddressManager: function() {
         var user = Auth.getCurrentUser();
         if (!user) {
