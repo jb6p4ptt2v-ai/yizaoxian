@@ -424,7 +424,6 @@ window.ClientPages = {
                 if (!addr) return;
                 var tagDisplay = addr.tag ? ' [' + addr.tag + ']' : '';
                 var lastUsedDisplay = addr.last_used ? ' <span style="font-size:11px;color:var(--text-secondary);">上次使用</span>' : '';
-                // ★★★ 显示完整地址（省市区+详细地址） ★★★
                 var fullDisplayAddress = addr.fullAddress || addr.address || '';
                 html += '<div style="padding:10px;border:1px solid var(--border);border-radius:8px;margin-bottom:8px;display:flex;justify-content:space-between;align-items:center;">' +
                     '<div><div><strong>' + (addr.name || '') + '</strong> ' + (addr.phone || '') + tagDisplay + (addr.is_default ? ' <span style="color:var(--primary);font-size:12px;">默认</span>' : '') + lastUsedDisplay + '</div>' +
@@ -497,7 +496,6 @@ window.ClientPages = {
 
                 if (!stockOk || !items.length) return;
 
-                // ★★★ 保存地址时同时更新完整地址 ★★★
                 var fullAddress = '';
                 var parts2 = [];
                 if (addr.province) parts2.push(addr.province);
@@ -776,7 +774,7 @@ window.ClientPages = {
     },
 
     // ================================================================
-    // 评价模块
+    // 评价模块（含图片上传）
     // ================================================================
     showReviewForm: function(orderId) {
         var user = Auth.getCurrentUser();
@@ -801,6 +799,7 @@ window.ClientPages = {
             html += '<div style="text-align:center;font-size:36px;padding:8px 0;">' + (product.emoji || '🥬') + '</div>';
             html += '<div style="text-align:center;font-weight:500;">' + product.name + '</div>';
 
+            // 评分
             html += '<div style="margin:12px 0;">';
             html += '<label style="display:block;font-size:13px;color:#666;margin-bottom:4px;">评分</label>';
             html += '<div style="display:flex;gap:8px;font-size:28px;" id="ratingStars">';
@@ -813,19 +812,23 @@ window.ClientPages = {
             html += '<input type="hidden" id="reviewRating" value="5">';
             html += '</div>';
 
+            // 评价内容
             html += '<div style="margin:12px 0;">';
             html += '<label style="display:block;font-size:13px;color:#666;margin-bottom:4px;">评价内容</label>';
             html += '<textarea id="reviewContent" rows="4" placeholder="说说您的使用感受..." style="width:100%;padding:8px;border:1px solid #ddd;border-radius:6px;font-size:14px;"></textarea>';
             html += '</div>';
 
+            // ★★★ 图片上传（修复：添加 for 属性关联 input） ★★★
             html += '<div style="margin:12px 0;">';
             html += '<label style="display:block;font-size:13px;color:#666;margin-bottom:4px;">上传图片（最多6张）</label>';
             html += '<div id="reviewImagePreview" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px;"></div>';
-            html += '<label id="uploadBtnLabel" style="display:inline-block;padding:8px 16px;background:var(--primary);color:#fff;border-radius:6px;cursor:pointer;font-size:13px;">📷 选择图片</label>';
+            // 关键修复：label 添加 for="reviewImageInput"
+            html += '<label for="reviewImageInput" id="uploadBtnLabel" style="display:inline-block;padding:8px 16px;background:var(--primary);color:#fff;border-radius:6px;cursor:pointer;font-size:13px;">📷 选择图片</label>';
             html += '<input type="file" id="reviewImageInput" accept="image/*" multiple style="display:none;" onchange="ClientPages._handleReviewImages(event)">';
             html += '<span style="font-size:11px;color:#999;margin-left:8px;">支持 JPG/PNG，每张不超过5MB</span>';
             html += '</div>';
 
+            // 标签
             html += '<div style="margin:12px 0;">';
             html += '<label style="display:block;font-size:13px;color:#666;margin-bottom:4px;">标签（点击选择）</label>';
             html += '<div style="display:flex;gap:6px;flex-wrap:wrap;" id="reviewTags">';
@@ -1460,7 +1463,7 @@ window.ClientPages = {
     },
 
     // ================================================================
-    // ★★★ 地址管理（拼多多完整对齐） ★★★
+    // 地址管理
     // ================================================================
     showAddressManager: function() {
         var user = Auth.getCurrentUser();
@@ -1484,7 +1487,6 @@ window.ClientPages = {
         }.bind(this));
     },
 
-    // ★★★ 地址列表渲染（显示完整地址：省+市+区+详细地址） ★★★
     _renderAddressList: function(addresses, user) {
         var html = '<div class="address-page-header">' +
             '<button class="address-page-back" onclick="ClientPages._hideAddressPage()">‹ 返回</button>' +
@@ -1501,14 +1503,12 @@ window.ClientPages = {
                 var defaultBadge = addr.is_default ? ' <span class="address-default-badge">默认</span>' : '';
                 var lastUsedBadge = addr.last_used ? ' <span class="address-lastused">上次使用</span>' : '';
 
-                // ★★★ 构建完整地址 ★★★
                 var fullAddress = '';
                 var parts = [];
                 if (addr.province) parts.push(addr.province);
                 if (addr.city && addr.city !== addr.province) parts.push(addr.city);
                 if (addr.district && addr.district !== addr.city) parts.push(addr.district);
                 if (addr.address) parts.push(addr.address);
-                // 如果 address 字段已经是完整地址，且包含省市区，则直接用 address
                 var shouldUseFull = false;
                 if (addr.address && addr.province) {
                     var addrCopy = addr.address;
@@ -1518,7 +1518,6 @@ window.ClientPages = {
                 }
                 fullAddress = shouldUseFull ? addr.address : parts.join('');
 
-                // 如果 fullAddress 为空，尝试用 street
                 if (!fullAddress && addr.street) fullAddress = addr.street;
 
                 html += '<div class="address-item-wrapper" data-id="' + addr.id + '">' +
@@ -1677,9 +1676,6 @@ window.ClientPages = {
         });
     },
 
-    // ================================================================
-    // 地址表单
-    // ================================================================
     openAddressForm: function(addressId) {
         var user = Auth.getCurrentUser();
         if (!user) {
@@ -1778,7 +1774,6 @@ window.ClientPages = {
 
     _showAddressPicker: function() {},
 
-    // ★★★ 保存地址（将省市区拼接到 address 字段） ★★★
     saveAddress: function() {
         console.log('💾 保存按钮被点击');
 
@@ -1843,7 +1838,6 @@ window.ClientPages = {
             return;
         }
 
-        // ★★★ 构建完整地址（省+市+区+详细地址） ★★★
         var fullAddressParts = [];
         if (province) fullAddressParts.push(province);
         if (city && city !== province) fullAddressParts.push(city);
@@ -1857,7 +1851,7 @@ window.ClientPages = {
             id: this.editingAddressId || undefined,
             name: name,
             phone: phone,
-            address: fullAddress,           // ★★★ 保存完整地址到 address 字段 ★★★
+            address: fullAddress,
             tag: tag,
             lng: lng,
             lat: lat,
