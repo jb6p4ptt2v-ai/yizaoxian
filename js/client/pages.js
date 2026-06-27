@@ -776,7 +776,7 @@ window.ClientPages = {
     },
 
     // ================================================================
-    // ★★★ 评价模块（含图片上传） ★★★
+    // ★★★ 评价模块（含 Worker 代理上传图片） ★★★
     // ================================================================
     showReviewForm: function(orderId) {
         var user = Auth.getCurrentUser();
@@ -787,6 +787,7 @@ window.ClientPages = {
 
         var self = this;
         this._uploadedImages = [];
+        this._selectedSpec = {};
 
         DataService.getOrderDetail(orderId).then(function(order) {
             if (!order || !order.items || order.items.length === 0) {
@@ -923,19 +924,21 @@ window.ClientPages = {
         event.target.value = '';
     },
 
+    // ★★★ 通过 Worker 代理上传图片 ★★★
     _uploadReviewImages: function(userId) {
         var self = this;
         var uploadPromises = [];
 
         self._uploadedImages.forEach(function(file) {
-            var promise = DataService.getReviewUploadUrl(userId, file.name, file.type)
+            var promise = DataService.uploadReviewImageViaWorker(userId, file)
                 .then(function(result) {
-                    if (result.success && result.uploadUrl) {
-                        return DataService.uploadReviewImage(result.uploadUrl, file)
-                            .then(function() {
-                                return result.publicUrl;
-                            });
+                    if (result.success) {
+                        return result.publicUrl;
                     }
+                    return null;
+                })
+                .catch(function(err) {
+                    console.warn('图片上传失败:', err);
                     return null;
                 });
             uploadPromises.push(promise);
@@ -1159,7 +1162,6 @@ window.ClientPages = {
                 for (var i = 0; i < 5; i++) {
                     stars += i < r.rating ? '★' : '☆';
                 }
-                // ★★★ 评价图片 ★★★
                 var imgHtml = '';
                 if (r.images && r.images.length > 0) {
                     var imgs = Array.isArray(r.images) ? r.images : JSON.parse(r.images);
@@ -1264,9 +1266,6 @@ window.ClientPages = {
         window.closeModal();
     },
 
-    // ================================================================
-    // 收藏
-    // ================================================================
     toggleFavorite: function(productId, btn) {
         var user = Auth.getCurrentUser();
         if (!user) {
@@ -1318,9 +1317,6 @@ window.ClientPages = {
         });
     },
 
-    // ================================================================
-    // 优惠券
-    // ================================================================
     renderCoupons: function() {
         var user = Auth.getCurrentUser();
         DataService.getCoupons(user ? user.id : null).then(function(result) {

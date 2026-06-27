@@ -1,6 +1,6 @@
 // ============================================================
-// 宜早鲜 Cloudflare Workers API - v5.4 完整版
-// 包含：用户、地址、供应商、商品、规格、搜索、收藏、订单（含提货码）、物流、评价（含R2真实上传）、地区、优惠券、消息、售后、库存、财务、备份、管理员
+// 宜早鲜 Cloudflare Workers API - v5.5 完整版
+// 新增：/reviews/upload 代理上传路由，绕过 R2 CORS
 // ============================================================
 
 export default {
@@ -23,6 +23,79 @@ export default {
             // ===== 健康检查 =====
             if (path === '/test' && method === 'GET') {
                 return new Response('Worker is alive!', { headers: corsHeaders });
+            }
+
+            // ============================================================
+            // ★★★ 图片上传代理（通过 Worker 直接写入 R2，绕过 CORS） ★★★
+            // ============================================================
+            if (path === '/reviews/upload' && method === 'POST') {
+                const contentType = request.headers.get('Content-Type') || '';
+                if (!contentType.includes('multipart/form-data')) {
+                    return new Response(JSON.stringify({ error: '请使用 multipart/form-data 格式上传' }), {
+                        status: 400,
+                        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+                    });
+                }
+
+                try {
+                    const formData = await request.formData();
+                    const file = formData.get('image');
+                    if (!file) {
+                        return new Response(JSON.stringify({ error: '缺少 image 字段' }), {
+                            status: 400,
+                            headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+                        });
+                    }
+
+                    if (!file.type || !file.type.startsWith('image/')) {
+                        return new Response(JSON.stringify({ error: '只允许上传图片文件' }), {
+                            status: 400,
+                            headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+                        });
+                    }
+
+                    if (file.size > 5 * 1024 * 1024) {
+                        return new Response(JSON.stringify({ error: '图片大小不能超过 5MB' }), {
+                            status: 400,
+                            headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+                        });
+                    }
+
+                    const userId = formData.get('userId') || 'anonymous';
+                    const ext = file.name ? file.name.split('.').pop() : 'jpg';
+                    const key = `reviews/${userId}/${Date.now()}_${Math.random().toString(36).slice(2, 8)}.${ext}`;
+
+                    if (!env.BUCKET) {
+                        return new Response(JSON.stringify({ error: 'R2 存储未配置，请检查 Worker 绑定' }), {
+                            status: 500,
+                            headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+                        });
+                    }
+
+                    // 写入 R2
+                    await env.BUCKET.put(key, file.stream(), {
+                        httpMetadata: {
+                            contentType: file.type || 'image/jpeg',
+                            cacheControl: 'public, max-age=31536000'
+                        }
+                    });
+
+                    const publicUrl = `https://yizaoxian-r2.1980217.xyz/${key}`;
+
+                    return new Response(JSON.stringify({
+                        success: true,
+                        publicUrl: publicUrl,
+                        key: key
+                    }), {
+                        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+                    });
+                } catch (e) {
+                    console.error('上传到 R2 失败:', e);
+                    return new Response(JSON.stringify({ error: '上传失败: ' + e.message }), {
+                        status: 500,
+                        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+                    });
+                }
             }
 
             // ============================================================
@@ -510,7 +583,7 @@ export default {
             }
 
             // ============================================================
-            // ★★★ 订单模块（含提货码、截单、预计提货、地址ID） ★★★
+            // 订单模块
             // ============================================================
             if (path === '/orders' && method === 'GET') {
                 const result = await env.DB.prepare('SELECT * FROM orders ORDER BY created_at DESC').all();
@@ -565,7 +638,6 @@ export default {
                 });
             }
 
-            // DELETE /orders
             if (path === '/orders' && method === 'DELETE') {
                 const id = url.searchParams.get('id');
                 if (!id) {
@@ -677,60 +749,8 @@ export default {
             }
 
             // ============================================================
-            // ★★★ 评价模块（含真实R2图片上传） ★★★
+            // ★★★ 评价模块（使用 Worker 代理上传图片） ★★★
             // ============================================================
-            if (path === '/reviews/upload-url' && method === 'POST') {
-                const body = await request.json();
-                const { userId, filename, contentType } = body;
-                if (!userId || !filename) {
-                    return new Response(JSON.stringify({ error: '缺少参数' }), {
-                        status: 400,
-                        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-                    });
-                }
-
-                const ext = filename.split('.').pop() || 'jpg';
-                const key = `reviews/${userId}/${Date.now()}_${Math.random().toString(36).slice(2, 8)}.${ext}`;
-
-                // ★★★ 检查是否绑定了 R2 ★★★
-                if (!env.BUCKET) {
-                    return new Response(JSON.stringify({ error: 'R2存储未配置，请在Worker绑定中设置BUCKET' }), {
-                        status: 500,
-                        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-                    });
-                }
-
-                try {
-                    // ★★★ 生成真实预签名URL ★★★
-                    const urlObj = await env.BUCKET.createPresignedUrl(key, {
-                        expiry: 300, // 5分钟有效
-                        method: 'PUT',
-                        headers: {
-                            'Content-Type': contentType || 'image/jpeg',
-                        },
-                    });
-                    const uploadUrl = urlObj.toString();
-                    // 构造公开访问URL（如果桶是公共读的）
-                    // 注意：需要根据实际R2域名替换，或使用绑定的自定义域名
-                    const publicUrl = `https://yizaoxian.${env.BUCKET.domain}/` + key;
-
-                    return new Response(JSON.stringify({
-                        success: true,
-                        uploadUrl: uploadUrl,
-                        publicUrl: publicUrl,
-                        key: key
-                    }), {
-                        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-                    });
-                } catch (e) {
-                    console.error('生成预签名URL失败:', e);
-                    return new Response(JSON.stringify({ error: '生成上传链接失败: ' + e.message }), {
-                        status: 500,
-                        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-                    });
-                }
-            }
-
             if (path === '/reviews' && method === 'POST') {
                 const body = await request.json();
                 const { orderId, productId, userId, rating, content, images, tags } = body;
@@ -902,7 +922,7 @@ export default {
             }
 
             // ============================================================
-            // ★★★ 地区数据 ★★★
+            // 地区数据
             // ============================================================
             if (path === '/regions' && method === 'GET') {
                 const parentId = url.searchParams.get('parentId') || '';
@@ -1007,7 +1027,7 @@ export default {
             }
 
             // ============================================================
-            // ★★★ 优惠券 ★★★
+            // 优惠券
             // ============================================================
             if (path === '/coupons' && method === 'GET') {
                 const userId = url.searchParams.get('userId');
@@ -1105,7 +1125,7 @@ export default {
             }
 
             // ============================================================
-            // ★★★ 消息 ★★★
+            // 消息
             // ============================================================
             if (path === '/messages' && method === 'GET') {
                 const userId = url.searchParams.get('userId');
@@ -1159,7 +1179,7 @@ export default {
             }
 
             // ============================================================
-            // ★★★ 售后 ★★★
+            // 售后
             // ============================================================
             if (path === '/after-sales' && method === 'POST') {
                 const body = await request.json();
@@ -1213,7 +1233,7 @@ export default {
             }
 
             // ============================================================
-            // ★★★ 库存 ★★★
+            // 库存
             // ============================================================
             if (path === '/inventory' && method === 'GET') {
                 const products = await env.DB.prepare('SELECT * FROM products ORDER BY created_at DESC').all();
@@ -1243,7 +1263,7 @@ export default {
             }
 
             // ============================================================
-            // ★★★ 财务 ★★★
+            // 财务
             // ============================================================
             if (path === '/finance' && method === 'GET') {
                 const result = await env.DB.prepare('SELECT * FROM finance_records ORDER BY created_at DESC').all();
@@ -1281,7 +1301,7 @@ export default {
             }
 
             // ============================================================
-            // ★★★ 备份 ★★★
+            // 备份
             // ============================================================
             if (path === '/backup/export' && method === 'GET') {
                 const users = await env.DB.prepare('SELECT * FROM users').all();
@@ -1419,7 +1439,7 @@ export default {
             }
 
             // ============================================================
-            // ★★★ 管理员 ★★★
+            // 管理员
             // ============================================================
             if (path === '/admin/login' && method === 'POST') {
                 const body = await request.json();

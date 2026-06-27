@@ -1,6 +1,6 @@
 /**
  * 数据服务层 - 调用 Cloudflare Workers API
- * 完整版 v5.4 - 移除图片上传降级，使用真实R2
+ * 完整版 v5.5 - 使用 Worker 代理上传图片
  */
 window.DataService = {
     _getApiBase: function() {
@@ -209,29 +209,27 @@ window.DataService = {
     },
 
     // ================================================================
-    // ★★★ 评价模块（真实R2上传，无降级） ★★★
+    // ★★★ 评价模块（使用 Worker 代理上传图片） ★★★
     // ================================================================
-    getReviewUploadUrl: function(userId, filename, contentType) {
-        return this._request('/reviews/upload-url', 'POST', {
-            userId: userId,
-            filename: filename,
-            contentType: contentType || 'image/jpeg'
-        });
-    },
 
-    // ★★★ 真实上传，无模拟降级 ★★★
-    uploadReviewImage: function(uploadUrl, file) {
-        return fetch(uploadUrl, {
-            method: 'PUT',
-            body: file,
-            headers: {
-                'Content-Type': file.type || 'image/jpeg'
-            }
+    // 通过 Worker 代理上传图片（绕过 R2 CORS）
+    uploadReviewImageViaWorker: function(userId, file) {
+        var formData = new FormData();
+        formData.append('image', file);
+        formData.append('userId', userId || 'anonymous');
+
+        var url = this._getApiBase() + '/reviews/upload';
+        return fetch(url, {
+            method: 'POST',
+            body: formData
+            // 不要设置 Content-Type，让浏览器自动设置 multipart/form-data boundary
         }).then(function(res) {
             if (!res.ok) {
-                throw new Error('上传失败: ' + res.status);
+                return res.json().then(function(data) {
+                    throw new Error(data.error || '上传失败');
+                });
             }
-            return true;
+            return res.json();
         });
     },
 
