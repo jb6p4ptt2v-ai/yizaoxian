@@ -1,6 +1,7 @@
 // ============================================================
 // 宜早鲜 Cloudflare Workers API - v4.0 完整版
 // 包含：商品、订单、评价、收藏、搜索、优惠券、消息、售后、物流
+// 修复：/reviews/all 路由、/after-sales 允许无 userId
 // ============================================================
 
 export default {
@@ -26,7 +27,7 @@ export default {
             }
 
             // ============================================================
-            // 用户模块（保持不变）
+            // 用户模块
             // ============================================================
             if (path === '/users/login' && method === 'POST') {
                 const body = await request.json();
@@ -237,7 +238,7 @@ export default {
             }
 
             // ============================================================
-            // 商品模块（含已售、产地、图片、规格、评价统计）
+            // 商品模块
             // ============================================================
             if (path === '/products' && method === 'GET') {
                 const result = await env.DB.prepare(
@@ -350,11 +351,11 @@ export default {
             }
 
             // ============================================================
-            // 搜索（含历史、热搜、联想、筛选）
+            // 搜索
             // ============================================================
             if (path === '/search' && method === 'GET') {
                 const keyword = url.searchParams.get('keyword') || '';
-                const sort = url.searchParams.get('sort') || 'relevance'; // relevance/price_asc/price_desc/sales
+                const sort = url.searchParams.get('sort') || 'relevance';
                 const category = url.searchParams.get('category') || '';
                 const page = parseInt(url.searchParams.get('page')) || 1;
                 const limit = parseInt(url.searchParams.get('limit')) || 20;
@@ -376,7 +377,6 @@ export default {
                     countParams.push(category);
                 }
 
-                // 排序
                 switch (sort) {
                     case 'price_asc': query += ' ORDER BY p.price ASC'; break;
                     case 'price_desc': query += ' ORDER BY p.price DESC'; break;
@@ -393,7 +393,6 @@ export default {
 
                 const result = await env.DB.prepare(query).bind(...params).all();
 
-                // 热搜词（按搜索频率）
                 const hotWords = await env.DB.prepare(
                     `SELECT keyword, COUNT(*) as count FROM search_history
                      WHERE created_at > datetime('now', '-7 days')
@@ -421,7 +420,6 @@ export default {
                         headers: { ...corsHeaders, 'Content-Type': 'application/json' }
                     });
                 }
-                // 删除旧记录（保留最近20条）
                 await env.DB.prepare(
                     `DELETE FROM search_history WHERE id IN (
                         SELECT id FROM search_history WHERE user_id = ?
@@ -513,7 +511,7 @@ export default {
             }
 
             // ============================================================
-            // 订单模块
+            // 订单
             // ============================================================
             if (path === '/orders' && method === 'GET') {
                 const result = await env.DB.prepare('SELECT * FROM orders ORDER BY created_at DESC').all();
@@ -534,24 +532,20 @@ export default {
                      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
                 ).bind(orderId, customerName, customerPhone, address, addressId || null, total, itemsJson, 'pending', pickupCode || '', cutoffTime || '', expectedPickupDate || '', new Date().toISOString(), new Date().toISOString()).run();
 
-                // 创建物流记录
                 await env.DB.prepare(
                     `INSERT INTO order_logistics (id, order_id, status, updated_at)
                      VALUES (?, ?, ?, ?)`
                 ).bind('log_' + Date.now().toString(36), orderId, 'pending', new Date().toISOString()).run();
 
-                // 扣减库存 + 更新已售
                 for (const item of items) {
                     await env.DB.prepare('UPDATE products SET stock = stock - ?, sales_count = sales_count + ? WHERE id = ?').bind(item.quantity, item.quantity, item.productId).run();
                 }
 
-                // 财务记录
                 await env.DB.prepare(
                     `INSERT INTO finance_records (id, type, category, amount, description, created_at)
                      VALUES (?, ?, ?, ?, ?, ?)`
                 ).bind('FIN' + Date.now().toString(36).toUpperCase(), 'income', '销售收入', total, '订单 ' + orderId, new Date().toISOString()).run();
 
-                // 发送消息通知
                 await env.DB.prepare(
                     `INSERT INTO messages (id, user_id, type, title, content, link, created_at)
                      VALUES (?, ?, ?, ?, ?, ?, ?)`
@@ -572,9 +566,6 @@ export default {
                 });
             }
 
-            // ============================================================
-            // 订单详情（含物流、评价状态）
-            // ============================================================
             if (path === '/orders/detail' && method === 'GET') {
                 const orderId = url.searchParams.get('id');
                 if (!orderId) {
@@ -594,10 +585,8 @@ export default {
 
                 const logistics = await env.DB.prepare('SELECT * FROM order_logistics WHERE order_id = ?').bind(orderId).first();
 
-                // 检查是否已评价
                 const hasReview = await env.DB.prepare('SELECT id FROM reviews WHERE order_id = ? LIMIT 1').bind(orderId).first();
 
-                // 检查是否有售后
                 const afterSale = await env.DB.prepare('SELECT * FROM after_sales WHERE order_id = ?').bind(orderId).first();
 
                 return new Response(JSON.stringify({
@@ -610,9 +599,6 @@ export default {
                 });
             }
 
-            // ============================================================
-            // 再次购买
-            // ============================================================
             if (path === '/orders/reorder' && method === 'POST') {
                 const body = await request.json();
                 const { orderId, userId } = body;
@@ -653,7 +639,6 @@ export default {
                 }
                 await env.DB.prepare('UPDATE orders SET status = ?, updated_at = ? WHERE id = ?').bind(status, new Date().toISOString(), orderId).run();
 
-                // 更新物流状态
                 if (status === 'shipped') {
                     await env.DB.prepare('UPDATE order_logistics SET status = "shipping", updated_at = ? WHERE order_id = ?').bind(new Date().toISOString(), orderId).run();
                 } else if (status === 'completed') {
@@ -665,9 +650,6 @@ export default {
                 });
             }
 
-            // ============================================================
-            // 物流更新（后台）
-            // ============================================================
             if (path === '/orders/logistics' && method === 'PUT') {
                 const body = await request.json();
                 const { orderId, trackingNumber, carrier, logisticsInfo } = body;
@@ -705,7 +687,6 @@ export default {
                      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
                 ).bind(id, orderId, productId, userId, rating, content || '', images || '[]', tags || '[]', new Date().toISOString(), new Date().toISOString()).run();
 
-                // 发送评价激励消息
                 await env.DB.prepare(
                     `INSERT INTO messages (id, user_id, type, title, content, link, created_at)
                      VALUES (?, ?, ?, ?, ?, ?, ?)`
@@ -751,7 +732,6 @@ export default {
 
                 const result = await env.DB.prepare(query).bind(...params).all();
 
-                // 统计
                 const stats = await env.DB.prepare(
                     `SELECT COUNT(*) as total, COALESCE(AVG(rating), 0) as avg_rating,
                      COUNT(CASE WHEN rating >= 4 THEN 1 END) as positive,
@@ -763,7 +743,6 @@ export default {
                      FROM reviews WHERE product_id = ?`
                 ).bind(productId).first();
 
-                // 评价标签聚合
                 const tagsResult = await env.DB.prepare(
                     `SELECT json_each.value as tag, COUNT(*) as count
                      FROM reviews, json_each(reviews.tags)
@@ -780,6 +759,20 @@ export default {
                     total: stats ? stats.total : 0,
                     totalPages: stats ? Math.ceil(stats.total / limit) : 0
                 }), {
+                    headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+                });
+            }
+
+            // ★★★ 新增：获取所有评价（管理员使用） ★★★
+            if (path === '/reviews/all' && method === 'GET') {
+                const result = await env.DB.prepare(
+                    `SELECT r.*, u.phone as user_phone, p.name as product_name, p.emoji as product_emoji
+                     FROM reviews r
+                     JOIN users u ON r.user_id = u.id
+                     JOIN products p ON r.product_id = p.id
+                     ORDER BY r.created_at DESC LIMIT 100`
+                ).all();
+                return new Response(JSON.stringify(result.results || []), {
                     headers: { ...corsHeaders, 'Content-Type': 'application/json' }
                 });
             }
@@ -832,7 +825,6 @@ export default {
             if (path === '/coupons' && method === 'GET') {
                 const userId = url.searchParams.get('userId');
                 const now = new Date().toISOString();
-                // 可用优惠券（未过期、有库存）
                 const available = await env.DB.prepare(
                     `SELECT c.*, (SELECT COUNT(*) FROM user_coupons WHERE coupon_id = c.id AND user_id = ?) as user_claimed
                      FROM coupons c
@@ -840,7 +832,6 @@ export default {
                      ORDER BY c.created_at DESC`
                 ).bind(userId || '', now).all();
 
-                // 用户已领取的优惠券
                 let userCoupons = [];
                 if (userId) {
                     userCoupons = await env.DB.prepare(
@@ -889,12 +880,38 @@ export default {
                 ).bind('uc_' + Date.now().toString(36), userId, couponId, new Date().toISOString()).run();
                 await env.DB.prepare('UPDATE coupons SET stock = stock - 1 WHERE id = ?').bind(couponId).run();
 
-                // 发送消息
                 await env.DB.prepare(
                     `INSERT INTO messages (id, user_id, type, title, content, link, created_at)
                      VALUES (?, ?, ?, ?, ?, ?, ?)`
                 ).bind('msg_' + Date.now().toString(36), userId, 'promotion', '优惠券领取成功', '您已领取 ' + coupon.name, '/coupons', new Date().toISOString()).run();
 
+                return new Response(JSON.stringify({ success: true }), {
+                    headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+                });
+            }
+
+            if (path === '/coupons' && method === 'POST') {
+                const body = await request.json();
+                const { name, type, value, minAmount, expireAt, stock } = body;
+                const id = 'cpn_' + Date.now().toString(36);
+                await env.DB.prepare(
+                    `INSERT INTO coupons (id, name, type, value, min_amount, expire_at, stock, created_at)
+                     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+                ).bind(id, name, type, value, minAmount || 0, expireAt, stock || 999, new Date().toISOString()).run();
+                return new Response(JSON.stringify({ success: true, couponId: id }), {
+                    headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+                });
+            }
+
+            if (path === '/coupons' && method === 'DELETE') {
+                const id = url.searchParams.get('id');
+                if (!id) {
+                    return new Response(JSON.stringify({ error: '缺少 id 参数' }), {
+                        status: 400,
+                        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+                    });
+                }
+                await env.DB.prepare('DELETE FROM coupons WHERE id = ?').bind(id).run();
                 return new Response(JSON.stringify({ success: true }), {
                     headers: { ...corsHeaders, 'Content-Type': 'application/json' }
                 });
@@ -976,18 +993,21 @@ export default {
                 });
             }
 
+            // ★★★ 修改：允许无 userId 获取全部售后（管理员用） ★★★
             if (path === '/after-sales' && method === 'GET') {
                 const userId = url.searchParams.get('userId');
-                if (!userId) {
-                    return new Response(JSON.stringify({ error: '缺少 userId 参数' }), {
-                        status: 400,
+                if (userId) {
+                    const result = await env.DB.prepare('SELECT * FROM after_sales WHERE user_id = ? ORDER BY created_at DESC').bind(userId).all();
+                    return new Response(JSON.stringify(result.results), {
+                        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+                    });
+                } else {
+                    // 管理员查看所有售后
+                    const result = await env.DB.prepare('SELECT * FROM after_sales ORDER BY created_at DESC LIMIT 100').all();
+                    return new Response(JSON.stringify(result.results), {
                         headers: { ...corsHeaders, 'Content-Type': 'application/json' }
                     });
                 }
-                const result = await env.DB.prepare('SELECT * FROM after_sales WHERE user_id = ? ORDER BY created_at DESC').bind(userId).all();
-                return new Response(JSON.stringify(result.results), {
-                    headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-                });
             }
 
             if (path === '/after-sales/audit' && method === 'PUT') {
@@ -1008,7 +1028,7 @@ export default {
             }
 
             // ============================================================
-            // 库存模块（保持不变）
+            // 库存
             // ============================================================
             if (path === '/inventory' && method === 'GET') {
                 const products = await env.DB.prepare('SELECT * FROM products ORDER BY created_at DESC').all();
@@ -1038,7 +1058,7 @@ export default {
             }
 
             // ============================================================
-            // 财务模块（保持不变）
+            // 财务
             // ============================================================
             if (path === '/finance' && method === 'GET') {
                 const result = await env.DB.prepare('SELECT * FROM finance_records ORDER BY created_at DESC').all();
@@ -1076,7 +1096,7 @@ export default {
             }
 
             // ============================================================
-            // 备份模块（保持不变）
+            // 备份
             // ============================================================
             if (path === '/backup/export' && method === 'GET') {
                 const users = await env.DB.prepare('SELECT * FROM users').all();
@@ -1147,22 +1167,65 @@ export default {
                 await env.DB.prepare('DELETE FROM inventory_logs').run();
                 await env.DB.prepare('DELETE FROM finance_records').run();
 
-                // 导入所有表...
                 for (const item of data.users || []) {
                     await env.DB.prepare(
                         `INSERT INTO users (id, phone, password, security_question, security_answer, role, created_at)
                          VALUES (?, ?, ?, ?, ?, ?, ?)`
                     ).bind(item.id, item.phone, item.password, item.security_question, item.security_answer, item.role, item.created_at).run();
                 }
-                // ... 其他表类似（省略完整导入以节省篇幅，但功能保留）
-
+                for (const sup of data.suppliers || []) {
+                    await env.DB.prepare(
+                        `INSERT INTO suppliers (id, name, contact, phone, address, lng, lat, province, city, district, created_at)
+                         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+                    ).bind(sup.id, sup.name, sup.contact || '', sup.phone || '', sup.address || '', sup.lng || null, sup.lat || null, sup.province || '', sup.city || '', sup.district || '', sup.created_at).run();
+                }
+                for (const p of data.products || []) {
+                    await env.DB.prepare(
+                        `INSERT INTO products (id, name, category, price, unit, stock,
+                         supplier_id, emoji, description, status, is_hot, today_pickup,
+                         origin, images, sales_count, created_at, updated_at)
+                         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+                    ).bind(p.id, p.name, p.category || '', p.price, p.unit || '份', p.stock || 0, p.supplier_id || null, p.emoji || '🥬', p.description || '', p.status || 'on', p.is_hot || 0, p.today_pickup !== undefined ? p.today_pickup : 1, p.origin || '', p.images || '[]', p.sales_count || 0, p.created_at, p.updated_at).run();
+                }
+                for (const o of data.orders || []) {
+                    await env.DB.prepare(
+                        `INSERT INTO orders (id, customer_name, customer_phone, address, address_id,
+                         total, items, status, pickup_code, cutoff_time, expected_pickup_date, created_at, updated_at)
+                         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+                    ).bind(o.id, o.customer_name, o.customer_phone, o.address, o.address_id || null, o.total, o.items, o.status || 'pending', o.pickup_code || '', o.cutoff_time || '', o.expected_pickup_date || '', o.created_at, o.updated_at).run();
+                }
+                for (const a of data.addresses || []) {
+                    await env.DB.prepare(
+                        `INSERT INTO addresses (id, user_id, name, phone, address, tag,
+                         lng, lat, province, city, district, street, is_default, last_used, created_at)
+                         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+                    ).bind(a.id, a.user_id, a.name, a.phone, a.address, a.tag || '', a.lng || null, a.lat || null, a.province || '', a.city || '', a.district || '', a.street || '', a.is_default || 0, a.last_used || 0, a.created_at).run();
+                }
+                for (const log of data.inventoryLogs || []) {
+                    await env.DB.prepare(
+                        `INSERT INTO inventory_logs (id, product_id, type, quantity, operator, note, created_at)
+                         VALUES (?, ?, ?, ?, ?, ?, ?)`
+                    ).bind(log.id, log.product_id, log.type, log.quantity, log.operator || '系统', log.note || '', log.created_at).run();
+                }
+                for (const f of data.financeRecords || []) {
+                    await env.DB.prepare(
+                        `INSERT INTO finance_records (id, type, category, amount, description, created_at)
+                         VALUES (?, ?, ?, ?, ?, ?)`
+                    ).bind(f.id, f.type, f.category, f.amount, f.description || '', f.created_at).run();
+                }
+                for (const admin of data.admins || []) {
+                    await env.DB.prepare(
+                        `INSERT INTO admins (id, username, password, permissions, created_at)
+                         VALUES (?, ?, ?, ?, ?)`
+                    ).bind(admin.id, admin.username, admin.password, admin.permissions || '[]', admin.created_at).run();
+                }
                 return new Response(JSON.stringify({ success: true, message: '导入成功' }), {
                     headers: { ...corsHeaders, 'Content-Type': 'application/json' }
                 });
             }
 
             // ============================================================
-            // 管理员模块
+            // 管理员
             // ============================================================
             if (path === '/admin/login' && method === 'POST') {
                 const body = await request.json();

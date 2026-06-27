@@ -7,14 +7,13 @@ window.AdminPages = {
             case 'inventory': this.renderInventory(); break;
             case 'orders': this.renderOrders(); break;
             case 'finance': this.renderFinance(); break;
-            case 'backup': this.renderBackup(); break;
-            case 'profile': this.renderProfile(); break;
-            case 'members': this.renderMembers(); break;
             case 'reviews': this.renderReviews(); break;
             case 'after_sales': this.renderAfterSales(); break;
             case 'coupons': this.renderCoupons(); break;
             case 'messages': this.renderMessages(); break;
-            case 'logistics': this.renderLogistics(); break;
+            case 'backup': this.renderBackup(); break;
+            case 'profile': this.renderProfile(); break;
+            case 'members': this.renderMembers(); break;
         }
     },
 
@@ -34,9 +33,10 @@ window.AdminPages = {
     // 概览仪表盘
     // ================================================================
     renderDashboard: function() {
+        var el = document.getElementById('admin-dashboard');
+        if (!el) return;
         if (!this._hasPermission('dashboard')) {
-            var el = document.getElementById('admin-dashboard');
-            if (el) el.innerHTML = '<div class="admin-card"><p>您没有权限访问此页面</p></div>';
+            el.innerHTML = '<div class="admin-card"><p>您没有权限访问此页面</p></div>';
             return;
         }
 
@@ -45,8 +45,8 @@ window.AdminPages = {
             DataService.getProducts(),
             DataService.getOrders(),
             DataService.getFinance(),
-            DataService.getReviews(),
-            DataService.getAfterSales()
+            DataService.getReviews ? DataService.getReviews() : Promise.resolve([]),
+            DataService.getAfterSales ? DataService.getAfterSales() : Promise.resolve([])
         ]).then(function(results) {
             var products = results[0] || [];
             var orders = results[1] || [];
@@ -71,7 +71,6 @@ window.AdminPages = {
                 '<div class="dash-item"><div class="dash-num" style="color:#ff6b00;">' + (avgRating ? avgRating.toFixed(1) : '—') + '⭐</div><div class="dash-label">平均评分</div></div>' +
                 '</div>';
 
-            // 待处理订单列表
             var pending = orders.filter(function(o) { return o && (o.status === 'pending' || o.status === 'shipped'); });
             var pendingHtml = '';
             if (!pending.length) {
@@ -92,11 +91,9 @@ window.AdminPages = {
                 }
             }
 
-            var el = document.getElementById('admin-dashboard');
-            if (el) el.innerHTML = html + '<div class="admin-card"><div class="card-title">📈 近期待处理</div>' + pendingHtml + '</div>';
+            el.innerHTML = html + '<div class="admin-card"><div class="card-title">📈 近期待处理</div>' + pendingHtml + '</div>';
         }).catch(function(err) {
-            var el = document.getElementById('admin-dashboard');
-            if (el) el.innerHTML = '<div class="admin-card"><div class="card-title">加载失败</div><p>' + err.message + '</p></div>';
+            el.innerHTML = '<div class="admin-card"><div class="card-title">加载失败</div><p>' + err.message + '</p></div>';
         });
     },
 
@@ -104,9 +101,10 @@ window.AdminPages = {
     // 供应商管理
     // ================================================================
     renderSuppliers: function() {
+        var el = document.getElementById('admin-suppliers');
+        if (!el) return;
         if (!this._hasPermission('suppliers')) {
-            var el = document.getElementById('admin-suppliers');
-            if (el) el.innerHTML = '<div class="admin-card"><p>您没有权限访问此页面</p></div>';
+            el.innerHTML = '<div class="admin-card"><p>您没有权限访问此页面</p></div>';
             return;
         }
 
@@ -128,11 +126,9 @@ window.AdminPages = {
             }
 
             html += '</div>';
-            var el = document.getElementById('admin-suppliers');
-            if (el) el.innerHTML = html;
+            el.innerHTML = html;
         }).catch(function(err) {
-            var el = document.getElementById('admin-suppliers');
-            if (el) el.innerHTML = '<div class="admin-card"><div class="card-title">供应商列表</div><p>加载失败: ' + err.message + '</p></div>';
+            el.innerHTML = '<div class="admin-card"><div class="card-title">供应商列表</div><p>加载失败: ' + err.message + '</p></div>';
         });
     },
 
@@ -241,12 +237,13 @@ window.AdminPages = {
     },
 
     // ================================================================
-    // 商品管理（含已售、产地、图片、热卖、今日可提）
+    // 商品管理
     // ================================================================
     renderProducts: function() {
+        var el = document.getElementById('admin-products');
+        if (!el) return;
         if (!this._hasPermission('products')) {
-            var el = document.getElementById('admin-products');
-            if (el) el.innerHTML = '<div class="admin-card"><p>您没有权限访问此页面</p></div>';
+            el.innerHTML = '<div class="admin-card"><p>您没有权限访问此页面</p></div>';
             return;
         }
 
@@ -271,11 +268,9 @@ window.AdminPages = {
                 html += '</tbody></table>';
             }
             html += '</div>';
-            var el = document.getElementById('admin-products');
-            if (el) el.innerHTML = html;
+            el.innerHTML = html;
         }).catch(function(err) {
-            var el = document.getElementById('admin-products');
-            if (el) el.innerHTML = '<div class="admin-card"><div class="card-title">商品管理</div><p>加载失败: ' + err.message + '</p></div>';
+            el.innerHTML = '<div class="admin-card"><div class="card-title">商品管理</div><p>加载失败: ' + err.message + '</p></div>';
         });
     },
 
@@ -420,9 +415,10 @@ window.AdminPages = {
     // 库存管理
     // ================================================================
     renderInventory: function() {
+        var el = document.getElementById('admin-inventory');
+        if (!el) return;
         if (!this._hasPermission('inventory')) {
-            var el = document.getElementById('admin-inventory');
-            if (el) el.innerHTML = '<div class="admin-card"><p>您没有权限访问此页面</p></div>';
+            el.innerHTML = '<div class="admin-card"><p>您没有权限访问此页面</p></div>';
             return;
         }
 
@@ -475,11 +471,9 @@ window.AdminPages = {
             }
             listHtml += '</div>';
 
-            var el = document.getElementById('admin-inventory');
-            if (el) el.innerHTML = statsHtml + logHtml + listHtml;
+            el.innerHTML = statsHtml + logHtml + listHtml;
         }).catch(function(err) {
-            var el = document.getElementById('admin-inventory');
-            if (el) el.innerHTML = '<div class="admin-card"><div class="card-title">库存管理</div><p>加载失败: ' + err.message + '</p></div>';
+            el.innerHTML = '<div class="admin-card"><div class="card-title">库存管理</div><p>加载失败: ' + err.message + '</p></div>';
         });
     },
 
@@ -501,12 +495,13 @@ window.AdminPages = {
     saveInventory: function(type) { this.openInventoryModal(type); },
 
     // ================================================================
-    // 订单管理（含提货码、预计提货）
+    // 订单管理
     // ================================================================
     renderOrders: function() {
+        var el = document.getElementById('admin-orders');
+        if (!el) return;
         if (!this._hasPermission('orders')) {
-            var el = document.getElementById('admin-orders');
-            if (el) el.innerHTML = '<div class="admin-card"><p>您没有权限访问此页面</p></div>';
+            el.innerHTML = '<div class="admin-card"><p>您没有权限访问此页面</p></div>';
             return;
         }
 
@@ -536,11 +531,9 @@ window.AdminPages = {
                 html += '</tbody></table>';
             }
             html += '</div>';
-            var el = document.getElementById('admin-orders');
-            if (el) el.innerHTML = html;
+            el.innerHTML = html;
         }).catch(function(err) {
-            var el = document.getElementById('admin-orders');
-            if (el) el.innerHTML = '<div class="admin-card"><div class="card-title">📋 订单管理</div><p>加载失败: ' + err.message + '</p></div>';
+            el.innerHTML = '<div class="admin-card"><div class="card-title">📋 订单管理</div><p>加载失败: ' + err.message + '</p></div>';
         });
     },
 
@@ -592,9 +585,10 @@ window.AdminPages = {
     // 财务管理
     // ================================================================
     renderFinance: function() {
+        var el = document.getElementById('admin-finance');
+        if (!el) return;
         if (!this._hasPermission('finance')) {
-            var el = document.getElementById('admin-finance');
-            if (el) el.innerHTML = '<div class="admin-card"><p>您没有权限访问此页面</p></div>';
+            el.innerHTML = '<div class="admin-card"><p>您没有权限访问此页面</p></div>';
             return;
         }
 
@@ -621,11 +615,9 @@ window.AdminPages = {
                 html += '</tbody></table>';
             }
             html += '</div>';
-            var el = document.getElementById('admin-finance');
-            if (el) el.innerHTML = html;
+            el.innerHTML = html;
         }).catch(function(err) {
-            var el = document.getElementById('admin-finance');
-            if (el) el.innerHTML = '<div class="admin-card"><div class="card-title">💰 财务管理</div><p>加载失败: ' + err.message + '</p></div>';
+            el.innerHTML = '<div class="admin-card"><div class="card-title">💰 财务管理</div><p>加载失败: ' + err.message + '</p></div>';
         });
     },
 
@@ -664,62 +656,39 @@ window.AdminPages = {
     // 评价管理
     // ================================================================
     renderReviews: function() {
+        var el = document.getElementById('admin-reviews');
+        if (!el) return;
         if (!this._hasPermission('reviews')) {
-            var el = document.getElementById('admin-reviews');
-            if (el) el.innerHTML = '<div class="admin-card"><p>您没有权限访问此页面</p></div>';
+            el.innerHTML = '<div class="admin-card"><p>您没有权限访问此页面</p></div>';
             return;
         }
 
-        DataService.getProducts().then(function(products) {
-            if (!Array.isArray(products)) products = [];
-            var allReviews = [];
-
-            var promises = products.map(function(p) {
-                return DataService.getProductReviews(p.id, 'latest', null, 1, 50)
-                    .then(function(result) {
-                        if (result.reviews) {
-                            result.reviews.forEach(function(r) {
-                                r.product_name = p.name;
-                                r.product_emoji = p.emoji || '🥬';
-                                allReviews.push(r);
-                            });
-                        }
-                    })
-                    .catch(function() {});
-            });
-
-            Promise.all(promises).then(function() {
-                allReviews.sort(function(a, b) {
-                    return (b.created_at || '').localeCompare(a.created_at || '');
+        DataService.getReviews().then(function(reviews) {
+            if (!Array.isArray(reviews)) reviews = [];
+            var html = '<div class="admin-card"><div class="card-title">⭐ 评价管理 <span style="font-size:13px;color:var(--text-secondary);font-weight:400;">共 ' + reviews.length + ' 条</span></div>';
+            if (reviews.length === 0) {
+                html += '<p style="color:var(--text-secondary);">暂无评价</p>';
+            } else {
+                html += '<table class="admin-table"><thead><tr><th>商品</th><th>用户</th><th>评分</th><th>评价内容</th><th>标签</th><th>时间</th><th>操作</th></tr></thead><tbody>';
+                reviews.slice(0, 50).forEach(function(r) {
+                    var stars = '';
+                    for (var i = 0; i < 5; i++) { stars += i < r.rating ? '★' : '☆'; }
+                    var tags = r.tags ? (Array.isArray(r.tags) ? r.tags : JSON.parse(r.tags || '[]')) : [];
+                    var tagsHtml = tags.length > 0 ? tags.map(function(t) { return '<span style="font-size:11px;background:#f0f0f0;padding:1px 8px;border-radius:10px;margin:2px;">' + t + '</span>'; }).join('') : '—';
+                    html += '<tr><td>' + (r.product_emoji || '🥬') + ' ' + (r.product_name || '') + '</td><td>' + (r.user_phone || '用户') + '</td><td style="color:#ff6b00;">' + stars + '</td>' +
+                        '<td style="font-size:12px;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + (r.content || '') + '</td>' +
+                        '<td>' + tagsHtml + '</td>' +
+                        '<td style="font-size:12px;">' + (r.created_at || '').slice(0, 16) + '</td>' +
+                        '<td><div class="actions">' +
+                        (r.reply ? '<span style="font-size:11px;color:#666;">已回复</span>' : '<button class="primary" onclick="AdminPages.replyReview(\'' + r.id + '\')">回复</button>') +
+                        '</div></td></tr>';
                 });
-
-                var html = '<div class="admin-card"><div class="card-title">⭐ 评价管理 <span style="font-size:13px;color:var(--text-secondary);font-weight:400;">共 ' + allReviews.length + ' 条</span></div>';
-                if (allReviews.length === 0) {
-                    html += '<p style="color:var(--text-secondary);">暂无评价</p>';
-                } else {
-                    html += '<table class="admin-table"><thead><tr><th>商品</th><th>用户</th><th>评分</th><th>评价内容</th><th>标签</th><th>时间</th><th>操作</th></tr></thead><tbody>';
-                    allReviews.slice(0, 30).forEach(function(r) {
-                        var stars = '';
-                        for (var i = 0; i < 5; i++) { stars += i < r.rating ? '★' : '☆'; }
-                        var tags = r.tags ? (Array.isArray(r.tags) ? r.tags : JSON.parse(r.tags || '[]')) : [];
-                        var tagsHtml = tags.length > 0 ? tags.map(function(t) { return '<span style="font-size:11px;background:#f0f0f0;padding:1px 8px;border-radius:10px;margin:2px;">' + t + '</span>'; }).join('') : '—';
-                        html += '<tr><td>' + (r.product_emoji || '🥬') + ' ' + (r.product_name || '') + '</td><td>' + (r.user_phone || '用户') + '</td><td style="color:#ff6b00;">' + stars + '</td>' +
-                            '<td style="font-size:12px;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + (r.content || '') + '</td>' +
-                            '<td>' + tagsHtml + '</td>' +
-                            '<td style="font-size:12px;">' + (r.created_at || '').slice(0, 16) + '</td>' +
-                            '<td><div class="actions">' +
-                            (r.reply ? '<span style="font-size:11px;color:#666;">已回复</span>' : '<button class="primary" onclick="AdminPages.replyReview(\'' + r.id + '\')">回复</button>') +
-                            '</div></td></tr>';
-                    });
-                    html += '</tbody></table>';
-                }
-                html += '</div>';
-                var el = document.getElementById('admin-reviews');
-                if (el) el.innerHTML = html;
-            });
+                html += '</tbody></table>';
+            }
+            html += '</div>';
+            el.innerHTML = html;
         }).catch(function(err) {
-            var el = document.getElementById('admin-reviews');
-            if (el) el.innerHTML = '<div class="admin-card"><div class="card-title">⭐ 评价管理</div><p>加载失败: ' + err.message + '</p></div>';
+            el.innerHTML = '<div class="admin-card"><div class="card-title">⭐ 评价管理</div><p>加载失败: ' + err.message + '</p></div>';
         });
     },
 
@@ -741,9 +710,10 @@ window.AdminPages = {
     // 售后管理
     // ================================================================
     renderAfterSales: function() {
+        var el = document.getElementById('admin-after-sales');
+        if (!el) return;
         if (!this._hasPermission('after_sales')) {
-            var el = document.getElementById('admin-after-sales');
-            if (el) el.innerHTML = '<div class="admin-card"><p>您没有权限访问此页面</p></div>';
+            el.innerHTML = '<div class="admin-card"><p>您没有权限访问此页面</p></div>';
             return;
         }
 
@@ -768,11 +738,9 @@ window.AdminPages = {
                 html += '</tbody></table>';
             }
             html += '</div>';
-            var el = document.getElementById('admin-after-sales');
-            if (el) el.innerHTML = html;
+            el.innerHTML = html;
         }).catch(function(err) {
-            var el = document.getElementById('admin-after-sales');
-            if (el) el.innerHTML = '<div class="admin-card"><div class="card-title">🔄 售后管理</div><p>加载失败: ' + err.message + '</p></div>';
+            el.innerHTML = '<div class="admin-card"><div class="card-title">🔄 售后管理</div><p>加载失败: ' + err.message + '</p></div>';
         });
     },
 
@@ -793,9 +761,10 @@ window.AdminPages = {
     // 优惠券管理
     // ================================================================
     renderCoupons: function() {
+        var el = document.getElementById('admin-coupons');
+        if (!el) return;
         if (!this._hasPermission('coupons')) {
-            var el = document.getElementById('admin-coupons');
-            if (el) el.innerHTML = '<div class="admin-card"><p>您没有权限访问此页面</p></div>';
+            el.innerHTML = '<div class="admin-card"><p>您没有权限访问此页面</p></div>';
             return;
         }
 
@@ -816,11 +785,9 @@ window.AdminPages = {
                 html += '</tbody></table>';
             }
             html += '</div>';
-            var el = document.getElementById('admin-coupons');
-            if (el) el.innerHTML = html;
+            el.innerHTML = html;
         }).catch(function(err) {
-            var el = document.getElementById('admin-coupons');
-            if (el) el.innerHTML = '<div class="admin-card"><div class="card-title">🎫 优惠券管理</div><p>加载失败: ' + err.message + '</p></div>';
+            el.innerHTML = '<div class="admin-card"><div class="card-title">🎫 优惠券管理</div><p>加载失败: ' + err.message + '</p></div>';
         });
     },
 
@@ -877,16 +844,17 @@ window.AdminPages = {
     },
 
     // ================================================================
-    // 消息管理（后台发送消息）
+    // 消息管理
     // ================================================================
     renderMessages: function() {
+        var el = document.getElementById('admin-messages');
+        if (!el) return;
         if (!this._hasPermission('messages')) {
-            var el = document.getElementById('admin-messages');
-            if (el) el.innerHTML = '<div class="admin-card"><p>您没有权限访问此页面</p></div>';
+            el.innerHTML = '<div class="admin-card"><p>您没有权限访问此页面</p></div>';
             return;
         }
 
-        var html = '<div class="admin-card"><div class="card-title">📬 消息推送 <button class="btn-sm" onclick="AdminPages.openSendMessageModal()">+ 发送消息</button></div>' +
+        el.innerHTML = '<div class="admin-card"><div class="card-title">📬 消息推送 <button class="btn-sm" onclick="AdminPages.openSendMessageModal()">+ 发送消息</button></div>' +
             '<p style="color:var(--text-secondary);font-size:13px;">向指定用户发送系统通知或促销消息</p>' +
             '<div style="margin-top:12px;background:#f8f9fa;padding:12px;border-radius:6px;">' +
             '<div style="font-size:13px;font-weight:500;">📌 使用说明</div>' +
@@ -895,8 +863,6 @@ window.AdminPages = {
             '<li>留空手机号则发送给所有用户</li>' +
             '<li>消息会在前台消息中心显示</li>' +
             '</ul></div></div>';
-        var el = document.getElementById('admin-messages');
-        if (el) el.innerHTML = html;
     },
 
     openSendMessageModal: function() {
@@ -921,7 +887,6 @@ window.AdminPages = {
         if (!title) { Utils.toast('请输入标题'); return; }
         if (!content) { Utils.toast('请输入内容'); return; }
 
-        // 获取用户列表
         DataService.getUsers().then(function(users) {
             if (!Array.isArray(users)) users = [];
             var targetUsers = users;
@@ -950,9 +915,10 @@ window.AdminPages = {
     // 备份管理
     // ================================================================
     renderBackup: function() {
+        var el = document.getElementById('admin-backup');
+        if (!el) return;
         if (!this._hasPermission('backup')) {
-            var el = document.getElementById('admin-backup');
-            if (el) el.innerHTML = '<div class="admin-card"><p>您没有权限访问此页面</p></div>';
+            el.innerHTML = '<div class="admin-card"><p>您没有权限访问此页面</p></div>';
             return;
         }
 
@@ -1015,9 +981,10 @@ window.AdminPages = {
     // 成员管理
     // ================================================================
     renderMembers: function() {
+        var el = document.getElementById('admin-members');
+        if (!el) return;
         if (!this._hasPermission('members')) {
-            var el = document.getElementById('admin-members');
-            if (el) el.innerHTML = '<div class="admin-card"><p>您没有权限访问此页面</p></div>';
+            el.innerHTML = '<div class="admin-card"><p>您没有权限访问此页面</p></div>';
             return;
         }
 
@@ -1038,11 +1005,9 @@ window.AdminPages = {
                 html += '</tbody></table>';
             }
             html += '</div>';
-            var el = document.getElementById('admin-members');
-            if (el) el.innerHTML = html;
+            el.innerHTML = html;
         }).catch(function(err) {
-            var el = document.getElementById('admin-members');
-            if (el) el.innerHTML = '<div class="admin-card"><div class="card-title">👥 成员管理</div><p>加载失败: ' + err.message + '</p></div>';
+            el.innerHTML = '<div class="admin-card"><div class="card-title">👥 成员管理</div><p>加载失败: ' + err.message + '</p></div>';
         });
     },
 
