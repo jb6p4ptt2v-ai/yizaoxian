@@ -1,15 +1,12 @@
 /**
  * 数据服务层 - 调用 Cloudflare Workers API
- * 数据存储在 D1 数据库
- * v4.0 - 完整版，包含所有新功能API
+ * 完整版 v4.0 - 含所有新功能接口
  */
 window.DataService = {
-    // ===== 动态获取 API 地址，始终从 CONFIG 读取 =====
     _getApiBase: function() {
         return (window.CONFIG && window.CONFIG.API_BASE) || 'https://yizaoxian-api.xiaofanzhouapple.workers.dev';
     },
 
-    // ===== 通用请求方法 =====
     _request: function(endpoint, method, data) {
         var url = this._getApiBase() + endpoint;
         var options = {
@@ -109,7 +106,7 @@ window.DataService = {
     },
 
     // ================================================================
-    // 商品模块（含已售、产地、图片、评价统计）
+    // 商品模块（含已售、产地、评价统计）
     // ================================================================
     getProducts: function() {
         return this._request('/products', 'GET');
@@ -123,7 +120,9 @@ window.DataService = {
         return this._request('/products?id=' + id, 'DELETE');
     },
 
+    // ================================================================
     // 商品规格
+    // ================================================================
     getProductSpecs: function(productId) {
         return this._request('/products/specs?productId=' + productId, 'GET');
     },
@@ -137,12 +136,12 @@ window.DataService = {
     },
 
     // ================================================================
-    // 搜索模块（含历史、热搜、筛选）
+    // 搜索模块
     // ================================================================
     search: function(keyword, sort, category, page, limit) {
         var params = [];
         if (keyword) params.push('keyword=' + encodeURIComponent(keyword));
-        if (sort) params.push('sort=' + encodeURIComponent(sort));
+        if (sort) params.push('sort=' + sort);
         if (category) params.push('category=' + encodeURIComponent(category));
         if (page) params.push('page=' + page);
         if (limit) params.push('limit=' + limit);
@@ -158,7 +157,7 @@ window.DataService = {
         return this._request('/search/history?userId=' + userId, 'GET');
     },
 
-    getHotSearchWords: function() {
+    getHotWords: function() {
         return this._request('/search/hot', 'GET');
     },
 
@@ -180,23 +179,22 @@ window.DataService = {
         return this._request('/orders', 'GET');
     },
 
-    saveOrder: function(orderData) {
-        return this._request('/orders', 'POST', orderData);
-    },
-
     getOrderDetail: function(orderId) {
         return this._request('/orders/detail?id=' + orderId, 'GET');
     },
 
-    reorder: function(orderId, userId) {
-        return this._request('/orders/reorder', 'POST', { orderId: orderId, userId: userId });
+    saveOrder: function(orderData) {
+        return this._request('/orders', 'POST', orderData);
     },
 
     updateOrderStatus: function(orderId, status) {
         return this._request('/orders/status', 'PUT', { orderId: orderId, status: status });
     },
 
-    // 物流
+    reorder: function(orderId, userId) {
+        return this._request('/orders/reorder', 'POST', { orderId: orderId, userId: userId });
+    },
+
     updateLogistics: function(orderId, trackingNumber, carrier, logisticsInfo) {
         return this._request('/orders/logistics', 'PUT', {
             orderId: orderId,
@@ -216,19 +214,22 @@ window.DataService = {
             userId: userId,
             rating: rating,
             content: content || '',
-            images: images || [],
-            tags: tags || []
+            images: images || '[]',
+            tags: tags || '[]'
         });
     },
 
     getProductReviews: function(productId, sort, ratingFilter, page, limit) {
-        var params = [];
-        if (sort) params.push('sort=' + sort);
-        if (ratingFilter) params.push('rating=' + ratingFilter);
-        if (page) params.push('page=' + page);
-        if (limit) params.push('limit=' + limit);
-        var query = params.length ? '&' + params.join('&') : '';
-        return this._request('/reviews/product?productId=' + productId + query, 'GET');
+        var params = '?productId=' + productId;
+        if (sort) params += '&sort=' + sort;
+        if (ratingFilter) params += '&rating=' + ratingFilter;
+        if (page) params += '&page=' + page;
+        if (limit) params += '&limit=' + limit;
+        return this._request('/reviews/product' + params, 'GET');
+    },
+
+    getReviews: function() {
+        return this._request('/reviews/all', 'GET');
     },
 
     replyReview: function(reviewId, reply) {
@@ -250,6 +251,14 @@ window.DataService = {
         return this._request('/coupons/claim', 'POST', { userId: userId, couponId: couponId });
     },
 
+    saveCoupon: function(couponData) {
+        return this._request('/coupons', 'POST', couponData);
+    },
+
+    deleteCoupon: function(id) {
+        return this._request('/coupons?id=' + id, 'DELETE');
+    },
+
     // ================================================================
     // 消息模块
     // ================================================================
@@ -262,13 +271,7 @@ window.DataService = {
     },
 
     sendMessage: function(userId, type, title, content, link) {
-        return this._request('/messages/send', 'POST', {
-            userId: userId,
-            type: type || 'system',
-            title: title,
-            content: content,
-            link: link || ''
-        });
+        return this._request('/messages/send', 'POST', { userId: userId, type: type, title: title, content: content, link: link || '' });
     },
 
     // ================================================================
@@ -285,7 +288,7 @@ window.DataService = {
     },
 
     getAfterSales: function(userId) {
-        return this._request('/after-sales?userId=' + userId, 'GET');
+        return this._request('/after-sales?userId=' + (userId || ''), 'GET');
     },
 
     auditAfterSale: function(afterSaleId, status, adminReply) {
@@ -387,7 +390,7 @@ window.DataService = {
     },
 
     // ================================================================
-    // 兼容旧版（供 dashboard 使用）
+    // 兼容旧版
     // ================================================================
     getAppData: function() {
         var self = this;
