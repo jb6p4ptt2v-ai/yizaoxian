@@ -5,9 +5,10 @@
  *   - 底部滑出弹窗（bottom sheet）
  *   - 搜索框（关键词过滤）
  *   - 刷新按钮（重新定位）
- *   - 地址名称（大号黑色）+ 详细地址（灰色小字）
+ *   - 地址名称（大号黑色）+ 完整地址（灰色小字）
  *   - 点击背景关闭
- *   - 选择后自动填充省市区 + 详细地址（不含省市区前缀）
+ *   - 选择后：省市区联动选中，详细地址填充（不含省市区前缀）
+ *   - 最终显示：省 + 市 + 区 + 详细地址
  */
 window.LocationHelper = (function() {
     'use strict';
@@ -97,11 +98,9 @@ window.LocationHelper = (function() {
                     if (formatted) {
                         candidates.push({
                             name: formatted,
-                            // 提取省市区用于联动
                             province: addrComp.province || '',
                             city: addrComp.city || '',
                             district: addrComp.district || '',
-                            // 详细地址（用于展示和填充）
                             detail: formatted,
                             street: addrComp.street || '',
                             number: addrComp.streetNumber || ''
@@ -114,11 +113,9 @@ window.LocationHelper = (function() {
                             var poiAddress = poi.address || '';
                             candidates.push({
                                 name: poi.name,
-                                // POI 的省市区使用逆地理结果的省市区
                                 province: addrComp.province || '',
                                 city: addrComp.city || '',
                                 district: addrComp.district || '',
-                                // 详细地址：POI 名称 + POI 地址
                                 detail: poi.name + (poiAddress ? ' ' + poiAddress : ''),
                                 street: poiAddress,
                                 number: ''
@@ -238,7 +235,7 @@ window.LocationHelper = (function() {
             </button>
         `;
 
-        // ---------- 地址列表 ----------
+        // ---------- 地址列表（拼多多风格） ----------
         var listWrap = document.createElement('div');
         listWrap.id = 'pickerListWrap';
         listWrap.style.cssText = `
@@ -248,6 +245,7 @@ window.LocationHelper = (function() {
             -webkit-overflow-scrolling: touch;
         `;
 
+        // 渲染列表项
         _renderListItems(listWrap, candidates);
 
         // ---------- 组装 ----------
@@ -411,7 +409,7 @@ window.LocationHelper = (function() {
     }
 
     /**
-     * ★★★ 渲染地址列表项（名称 + 灰色小字地址） ★★★
+     * ★★★ 渲染地址列表项（拼多多风格：黑色名称 + 灰色完整地址） ★★★
      */
     function _renderListItems(container, candidates) {
         if (!container) return;
@@ -424,27 +422,28 @@ window.LocationHelper = (function() {
         var html = '';
         candidates.forEach(function(item) {
             var displayName = item.name || '未命名';
-            var displayAddress = item.detail || '';
+            // 完整地址（用于灰色小字显示）
+            var fullAddress = item.detail || '';
 
-            // 如果详细地址和名称相同，不重复显示
-            if (displayAddress === displayName) {
-                displayAddress = '';
+            // 如果完整地址与名称相同，不重复显示
+            if (fullAddress === displayName) {
+                fullAddress = '';
             }
 
-            // 如果详细地址为空，尝试用 province+city+district 拼接
-            if (!displayAddress) {
+            // 如果完整地址为空，尝试用 province+city+district 拼接
+            if (!fullAddress) {
                 var parts = [];
                 if (item.province) parts.push(item.province);
                 if (item.city && item.city !== item.province) parts.push(item.city);
                 if (item.district && item.district !== item.city) parts.push(item.district);
                 if (parts.length > 0) {
-                    displayAddress = parts.join('');
+                    fullAddress = parts.join('');
                 }
             }
 
             // 转义特殊字符（用于onclick参数）
             var safeName = displayName.replace(/'/g, "\\'");
-            var safeAddress = displayAddress.replace(/'/g, "\\'");
+            var safeFullAddress = fullAddress.replace(/'/g, "\\'");
             var safeProvince = (item.province || '').replace(/'/g, "\\'");
             var safeCity = (item.city || '').replace(/'/g, "\\'");
             var safeDistrict = (item.district || '').replace(/'/g, "\\'");
@@ -452,10 +451,11 @@ window.LocationHelper = (function() {
             var safeDetail = (item.detail || item.name || '').replace(/'/g, "\\'");
             var safeNumber = (item.number || '').replace(/'/g, "\\'");
 
+            // 拼多多风格：名称（黑色大字）+ 完整地址（灰色小字）
             html += `
-                <div class="picker-address-item" onclick="LocationHelper._selectAddress('${safeName}', '${safeAddress}', '${safeProvince}', '${safeCity}', '${safeDistrict}', '${safeStreet}', '${safeDetail}', '${safeNumber}')">
+                <div class="picker-address-item" onclick="LocationHelper._selectAddress('${safeName}', '${safeFullAddress}', '${safeProvince}', '${safeCity}', '${safeDistrict}', '${safeStreet}', '${safeDetail}', '${safeNumber}')">
                     <div class="name">${displayName}</div>
-                    ${displayAddress ? '<div class="address">' + displayAddress + '</div>' : ''}
+                    ${fullAddress ? '<div class="address">' + fullAddress + '</div>' : ''}
                 </div>
             `;
         });
@@ -484,39 +484,54 @@ window.LocationHelper = (function() {
     }
 
     /**
-     * ★★★ 选择地址（优化：详细地址不包含省市区） ★★★
+     * ★★★ 选择地址（完全对齐拼多多） ★★★
+     * 规则：
+     * 1. 省市区联动自动选中
+     * 2. 详细地址填充：去除省市区前缀，保留街道及以下
+     * 3. 最终显示：省 + 市 + 区 + 详细地址
      */
-    function _selectAddress(name, address, province, city, district, street, detail, number) {
+    function _selectAddress(name, fullAddress, province, city, district, street, detail, number) {
         console.log('✅ 用户选择了地址:', name);
+        console.log('📋 完整地址:', fullAddress);
 
         var addressInputId = _currentAddressInputId;
         var regionData = _currentRegionData;
         var onAddressPicked = _currentOnAddressPicked;
 
         // ================================================================
-        // ★★★ 核心优化：提取详细地址（不包含省市区） ★★★
+        // 1. 填充省市区联动（使用原始省市区数据）
         // ================================================================
-        // 1. 先填充省市区联动（使用原始省市区数据）
         if (regionData && typeof regionData.setSelected === 'function') {
             try {
                 regionData.setSelected(province, city, district);
+                console.log('✅ 省市区已联动:', province, city, district);
             } catch(e) {
                 console.warn('regionData.setSelected 调用失败:', e);
             }
         }
 
-        // 2. 提取详细地址（不含省市区）
-        var fullDetail = detail || name || '';
+        // ================================================================
+        // 2. 提取详细地址（不包含省市区前缀）
+        // ================================================================
+        var detailAddress = '';
 
-        // 构建省市区前缀字符串，用于从详细地址中移除
+        // 优先使用 detail（候选地址的详细部分）
+        if (detail && detail.length > 0) {
+            detailAddress = detail;
+        } else if (name && name.length > 0) {
+            detailAddress = name;
+        }
+
+        // 从 fullAddress 中提取详细地址（去除省市区前缀）
+        // 构建省市区前缀字符串
         var prefixParts = [];
         if (province) prefixParts.push(province);
         if (city && city !== province) prefixParts.push(city);
         if (district && district !== city) prefixParts.push(district);
         var prefix = prefixParts.join('');
 
-        // 移除省市区前缀
-        var cleanedDetail = fullDetail;
+        // 从完整地址中移除省市区前缀
+        var cleanedDetail = detailAddress;
         if (prefix && cleanedDetail.indexOf(prefix) === 0) {
             cleanedDetail = cleanedDetail.substring(prefix.length).trim();
             // 清理开头可能残留的分隔符
@@ -528,18 +543,19 @@ window.LocationHelper = (function() {
             var streetParts = [];
             if (street) streetParts.push(street);
             if (number) streetParts.push(number);
-            cleanedDetail = streetParts.join('') || fullDetail;
+            cleanedDetail = streetParts.join('') || detailAddress;
         }
 
         // 如果还是空，使用 name
         if (!cleanedDetail || cleanedDetail.length < 2) {
-            cleanedDetail = name || fullDetail;
+            cleanedDetail = name || detailAddress;
         }
 
-        console.log('📝 原始详细地址:', fullDetail);
-        console.log('📝 处理后详细地址:', cleanedDetail);
+        console.log('📝 详细地址（不含省市区）:', cleanedDetail);
 
+        // ================================================================
         // 3. 填充详细地址到输入框
+        // ================================================================
         var addrInput = document.getElementById(addressInputId);
         if (addrInput) {
             addrInput.value = cleanedDetail;
@@ -549,19 +565,21 @@ window.LocationHelper = (function() {
             addrInput.dataset.city = city || '';
             addrInput.dataset.district = district || '';
             addrInput.dataset.street = street || '';
-            addrInput.dataset.fullAddress = fullDetail;
+            addrInput.dataset.fullAddress = fullAddress || detail || name || '';
             console.log('📝 已填充详细地址:', cleanedDetail);
         } else {
             console.error('❌ 未找到输入框 #' + addressInputId);
         }
 
+        // ================================================================
         // 4. 执行回调
+        // ================================================================
         if (typeof onAddressPicked === 'function') {
             try {
                 onAddressPicked({
                     name: name,
                     detail: cleanedDetail,
-                    fullAddress: fullDetail,
+                    fullAddress: fullAddress || detail || name || '',
                     province: province,
                     city: city,
                     district: district,
@@ -573,7 +591,9 @@ window.LocationHelper = (function() {
             }
         }
 
+        // ================================================================
         // 5. 关闭弹窗
+        // ================================================================
         var overlay = document.getElementById('pddAddressModal');
         if (overlay) overlay.remove();
 
@@ -589,4 +609,4 @@ window.LocationHelper = (function() {
         _showAddressPicker: _showAddressPicker
     };
 })();
-console.log('✅ LocationHelper 已加载（拼多多风格：底部滑出 + 搜索 + 刷新 + 灰色小字地址 + 省市区分离）');
+console.log('✅ LocationHelper 已加载（拼多多风格：弹窗列表显示名称+完整地址，详细地址不含省市区）');
