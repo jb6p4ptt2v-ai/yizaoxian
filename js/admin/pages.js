@@ -99,7 +99,7 @@ window.AdminPages = {
     },
 
     // ================================================================
-    // 供应商管理
+    // 供应商管理（★ 完整地址显示 + 定位对齐拼多多 ★）
     // ================================================================
     renderSuppliers: function() {
         var el = document.getElementById('admin-suppliers');
@@ -120,7 +120,17 @@ window.AdminPages = {
                 html += '<table class="admin-table"><thead><tr><th>名称</th><th>联系人</th><th>电话</th><th>地址</th><th>操作</th></tr></thead><tbody>';
                 list.forEach(function(s) {
                     if (!s) return;
-                    html += '<tr><td>' + (s.name || '') + '</td><td>' + (s.contact || '-') + '</td><td>' + (s.phone || '-') + '</td><td style="font-size:12px;">' + (s.address || '-') + '</td>' +
+                    // ★★★ 拼接完整地址 ★★★
+                    var fullAddress = '';
+                    var parts = [];
+                    if (s.province) parts.push(s.province);
+                    if (s.city && s.city !== s.province) parts.push(s.city);
+                    if (s.district && s.district !== s.city) parts.push(s.district);
+                    if (s.address) parts.push(s.address);
+                    fullAddress = parts.join('');
+                    if (!fullAddress && s.address) fullAddress = s.address;
+
+                    html += '<tr><td>' + (s.name || '') + '</td><td>' + (s.contact || '-') + '</td><td>' + (s.phone || '-') + '</td><td style="font-size:12px;">' + fullAddress + '</td>' +
                         '<td><div class="actions"><button class="primary" onclick="AdminPages.openSupplierModal(\'' + s.id + '\')">编辑</button><button class="danger" onclick="AdminPages.deleteSupplier(\'' + s.id + '\')">删除</button></div></td></tr>';
                 });
                 html += '</tbody></table>';
@@ -133,6 +143,7 @@ window.AdminPages = {
         });
     },
 
+    // ★★★ 供应商弹窗（定位使用 LocationHelper，保存时拼接完整地址） ★★★
     openSupplierModal: function(id) {
         var self = this;
         var promise = id ? DataService.getSuppliers().then(function(list) {
@@ -188,6 +199,7 @@ window.AdminPages = {
         });
     },
 
+    // ★★★ 保存供应商（拼接完整地址到 address 字段） ★★★
     saveSupplier: function(id) {
         var nameInput = document.getElementById('f_sup_name');
         var contactInput = document.getElementById('f_sup_contact');
@@ -202,6 +214,7 @@ window.AdminPages = {
         var contact = contactInput.value.trim();
         var phone = phoneInput.value.trim();
         var address = addressInput.value.trim();
+
         var addrInput = document.getElementById('f_sup_address');
         var lng = addrInput ? parseFloat(addrInput.dataset.lng) || null : null;
         var lat = addrInput ? parseFloat(addrInput.dataset.lat) || null : null;
@@ -216,8 +229,28 @@ window.AdminPages = {
                 district = selected.district || '';
             }
         }
-        var data = { name: name, contact: contact, phone: phone, address: address, lng: lng, lat: lat, province: province, city: city, district: district };
+
+        // ★★★ 拼接完整地址 ★★★
+        var fullAddressParts = [];
+        if (province) fullAddressParts.push(province);
+        if (city && city !== province) fullAddressParts.push(city);
+        if (district && district !== city) fullAddressParts.push(district);
+        if (address) fullAddressParts.push(address);
+        var fullAddress = fullAddressParts.join('');
+
+        var data = {
+            name: name,
+            contact: contact,
+            phone: phone,
+            address: fullAddress,        // ★ 保存完整地址
+            lng: lng,
+            lat: lat,
+            province: province,
+            city: city,
+            district: district
+        };
         if (id) data.id = id;
+
         DataService.saveSupplier(data).then(function() {
             Utils.toast('✅ 供应商已保存');
             window.closeModal();
@@ -238,7 +271,7 @@ window.AdminPages = {
     },
 
     // ================================================================
-    // ★★★ 商品管理（含规格管理、图片管理） ★★★
+    // 商品管理
     // ================================================================
     renderProducts: function() {
         var el = document.getElementById('admin-products');
@@ -273,7 +306,6 @@ window.AdminPages = {
             html += '</div>';
             el.innerHTML = html;
 
-            // 加载规格数量
             list.forEach(function(p) {
                 DataService.getProductSpecs(p.id).then(function(specs) {
                     p._specCount = specs ? specs.length : 0;
@@ -299,7 +331,6 @@ window.AdminPages = {
             var isEdit = !!data;
             var html = '<div class="modal-title">' + (isEdit ? '编辑商品' : '添加商品') + '</div>';
 
-            // 基本信息
             html += '<div style="border-bottom:2px solid var(--primary);padding-bottom:8px;margin-bottom:12px;font-weight:500;">📦 基本信息</div>';
 
             html += '<div class="form-group"><label>商品名称 *</label><input id="f_prod_name" value="' + (data ? data.name : '') + '" placeholder="如：有机小白菜"></div>';
@@ -334,7 +365,7 @@ window.AdminPages = {
 
             html += '<div class="form-group"><label>今日可提</label><input type="checkbox" id="f_prod_today" ' + (data && data.today_pickup !== 0 ? 'checked' : '') + '> ✅ 今日可提</div>';
 
-            // ★★★ 图片管理 ★★★
+            // 图片管理
             html += '<div style="border-bottom:2px solid var(--primary);padding-bottom:8px;margin:16px 0 12px;font-weight:500;">🖼️ 商品图片</div>';
             html += '<div id="productImageList" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px;">';
             if (data && data.images) {
@@ -361,12 +392,11 @@ window.AdminPages = {
                 '<span style="font-size:11px;color:#999;">支持多张，每张不超过5MB</span>' +
                 '</div>';
 
-            // ★★★ 规格管理 ★★★
+            // 规格管理
             html += '<div style="border-bottom:2px solid var(--primary);padding-bottom:8px;margin:16px 0 12px;font-weight:500;">📐 规格管理</div>';
             html += '<div id="specList" style="margin-bottom:8px;">';
             html += '<div style="display:flex;gap:8px;flex-wrap:wrap;font-size:13px;color:#666;">';
             if (id) {
-                // 异步加载规格
                 html += '<span id="specLoading">加载规格中...</span>';
             } else {
                 html += '<span style="color:#999;">请先保存商品后再添加规格</span>';
@@ -386,7 +416,6 @@ window.AdminPages = {
             var overlay = document.getElementById('modalOverlay');
             if (overlay) overlay.classList.add('active');
 
-            // 加载供应商列表
             DataService.getSuppliers().then(function(suppliers) {
                 var sel = document.getElementById('f_prod_supplier');
                 if (!sel) return;
@@ -402,7 +431,6 @@ window.AdminPages = {
                 });
             });
 
-            // 加载规格列表
             if (id) {
                 DataService.getProductSpecs(id).then(function(specs) {
                     self._renderSpecList(specs, id);
@@ -1042,7 +1070,7 @@ window.AdminPages = {
     },
 
     // ================================================================
-    // ★★★ 地区数据管理（动态同步） ★★★
+    // 地区管理
     // ================================================================
     renderRegions: function() {
         var el = document.getElementById('admin-regions');
