@@ -1,6 +1,6 @@
 // ============================================================
-// 宜早鲜 Cloudflare Workers API - v5.2 修复版
-// 修复：地区同步错误处理、R2 模拟降级
+// 宜早鲜 Cloudflare Workers API - v5.3 完整版
+// 包含：用户、地址、供应商、商品、规格、搜索、收藏、订单（含提货码）、物流、评价、地区、优惠券、消息、售后、库存、财务、备份、管理员
 // ============================================================
 
 export default {
@@ -510,7 +510,7 @@ export default {
             }
 
             // ============================================================
-            // 订单
+            // ★★★ 订单模块（含提货码、截单、预计提货、地址ID） ★★★
             // ============================================================
             if (path === '/orders' && method === 'GET') {
                 const result = await env.DB.prepare('SELECT * FROM orders ORDER BY created_at DESC').all();
@@ -561,6 +561,21 @@ export default {
                 const result = await env.DB.prepare('SELECT * FROM orders ORDER BY created_at DESC').all();
                 const orders = result.results.map(o => ({ ...o, items: JSON.parse(o.items || '[]') }));
                 return new Response(JSON.stringify({ success: true, orderId: orderId, orders: orders }), {
+                    headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+                });
+            }
+
+            // ★★★ 新增 DELETE /orders 路由 ★★★
+            if (path === '/orders' && method === 'DELETE') {
+                const id = url.searchParams.get('id');
+                if (!id) {
+                    return new Response(JSON.stringify({ error: '缺少 id 参数' }), {
+                        status: 400,
+                        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+                    });
+                }
+                await env.DB.prepare('DELETE FROM orders WHERE id = ?').bind(id).run();
+                return new Response(JSON.stringify({ success: true }), {
                     headers: { ...corsHeaders, 'Content-Type': 'application/json' }
                 });
             }
@@ -660,9 +675,8 @@ export default {
                     headers: { ...corsHeaders, 'Content-Type': 'application/json' }
                 });
             }
-
             // ============================================================
-            // 评价
+            // ★★★ 评价模块（含图片上传模拟） ★★★
             // ============================================================
             if (path === '/reviews/upload-url' && method === 'POST') {
                 const body = await request.json();
@@ -680,7 +694,6 @@ export default {
                 let uploadUrl = '';
                 let publicUrl = '';
 
-                // 如果 R2 绑定了 env.BUCKET，使用真实上传
                 if (env.BUCKET) {
                     try {
                         const urlObj = await env.BUCKET.createPresignedUrl(key, {
@@ -694,12 +707,10 @@ export default {
                         publicUrl = `https://yizaoxian.${env.BUCKET.domain}/` + key;
                     } catch (e) {
                         console.error('生成预签名URL失败:', e);
-                        // 降级：返回模拟URL
                         uploadUrl = 'https://mock-r2.example.com/' + key;
                         publicUrl = 'https://mock-r2.example.com/' + key;
                     }
                 } else {
-                    // R2 未配置，返回模拟URL
                     console.warn('R2未配置，返回模拟URL');
                     uploadUrl = 'https://mock-r2.example.com/' + key;
                     publicUrl = 'https://mock-r2.example.com/' + key;
@@ -886,7 +897,7 @@ export default {
             }
 
             // ============================================================
-            // 地区数据
+            // ★★★ 地区数据 ★★★
             // ============================================================
             if (path === '/regions' && method === 'GET') {
                 const parentId = url.searchParams.get('parentId') || '';
@@ -907,7 +918,6 @@ export default {
                 });
             }
 
-            // ★★★ 修复地区同步错误处理 ★★★
             if (path === '/regions/sync' && method === 'POST') {
                 const body = await request.json();
                 const { keyword } = body;
@@ -933,7 +943,6 @@ export default {
 
                     const data = await response.json();
                     if (data.status !== '1') {
-                        // 返回更友好的错误信息
                         let errorMsg = data.info || '未知错误';
                         if (data.info === 'USERKEY_PLAT_NOMATCH') {
                             errorMsg = '高德API Key无效或未开通行政区划查询服务，请检查Key配置';
@@ -993,7 +1002,7 @@ export default {
             }
 
             // ============================================================
-            // 优惠券
+            // ★★★ 优惠券 ★★★
             // ============================================================
             if (path === '/coupons' && method === 'GET') {
                 const userId = url.searchParams.get('userId');
@@ -1091,7 +1100,7 @@ export default {
             }
 
             // ============================================================
-            // 消息
+            // ★★★ 消息 ★★★
             // ============================================================
             if (path === '/messages' && method === 'GET') {
                 const userId = url.searchParams.get('userId');
@@ -1145,7 +1154,7 @@ export default {
             }
 
             // ============================================================
-            // 售后
+            // ★★★ 售后 ★★★
             // ============================================================
             if (path === '/after-sales' && method === 'POST') {
                 const body = await request.json();
@@ -1199,7 +1208,7 @@ export default {
             }
 
             // ============================================================
-            // 库存
+            // ★★★ 库存 ★★★
             // ============================================================
             if (path === '/inventory' && method === 'GET') {
                 const products = await env.DB.prepare('SELECT * FROM products ORDER BY created_at DESC').all();
@@ -1229,7 +1238,7 @@ export default {
             }
 
             // ============================================================
-            // 财务
+            // ★★★ 财务 ★★★
             // ============================================================
             if (path === '/finance' && method === 'GET') {
                 const result = await env.DB.prepare('SELECT * FROM finance_records ORDER BY created_at DESC').all();
@@ -1267,7 +1276,7 @@ export default {
             }
 
             // ============================================================
-            // 备份
+            // ★★★ 备份 ★★★
             // ============================================================
             if (path === '/backup/export' && method === 'GET') {
                 const users = await env.DB.prepare('SELECT * FROM users').all();
@@ -1405,7 +1414,7 @@ export default {
             }
 
             // ============================================================
-            // 管理员
+            // ★★★ 管理员 ★★★
             // ============================================================
             if (path === '/admin/login' && method === 'POST') {
                 const body = await request.json();
