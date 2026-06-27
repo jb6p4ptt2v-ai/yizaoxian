@@ -12,6 +12,8 @@ window.ClientPages = {
     _selectedSpec: {},
     _uploadedImages: [],
     _maxImages: 6,
+    _currentReviewPage: 1,
+    _currentReviews: [],
 
     // ================================================================
     // 初始化
@@ -774,7 +776,7 @@ window.ClientPages = {
     },
 
     // ================================================================
-    // 评价模块（含图片上传）
+    // ★★★ 评价模块（含图片上传） ★★★
     // ================================================================
     showReviewForm: function(orderId) {
         var user = Auth.getCurrentUser();
@@ -785,7 +787,6 @@ window.ClientPages = {
 
         var self = this;
         this._uploadedImages = [];
-        this._selectedSpec = {};
 
         DataService.getOrderDetail(orderId).then(function(order) {
             if (!order || !order.items || order.items.length === 0) {
@@ -799,7 +800,6 @@ window.ClientPages = {
             html += '<div style="text-align:center;font-size:36px;padding:8px 0;">' + (product.emoji || '🥬') + '</div>';
             html += '<div style="text-align:center;font-weight:500;">' + product.name + '</div>';
 
-            // 评分
             html += '<div style="margin:12px 0;">';
             html += '<label style="display:block;font-size:13px;color:#666;margin-bottom:4px;">评分</label>';
             html += '<div style="display:flex;gap:8px;font-size:28px;" id="ratingStars">';
@@ -812,23 +812,19 @@ window.ClientPages = {
             html += '<input type="hidden" id="reviewRating" value="5">';
             html += '</div>';
 
-            // 评价内容
             html += '<div style="margin:12px 0;">';
             html += '<label style="display:block;font-size:13px;color:#666;margin-bottom:4px;">评价内容</label>';
             html += '<textarea id="reviewContent" rows="4" placeholder="说说您的使用感受..." style="width:100%;padding:8px;border:1px solid #ddd;border-radius:6px;font-size:14px;"></textarea>';
             html += '</div>';
 
-            // ★★★ 图片上传（修复：添加 for 属性关联 input） ★★★
             html += '<div style="margin:12px 0;">';
             html += '<label style="display:block;font-size:13px;color:#666;margin-bottom:4px;">上传图片（最多6张）</label>';
             html += '<div id="reviewImagePreview" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px;"></div>';
-            // 关键修复：label 添加 for="reviewImageInput"
             html += '<label for="reviewImageInput" id="uploadBtnLabel" style="display:inline-block;padding:8px 16px;background:var(--primary);color:#fff;border-radius:6px;cursor:pointer;font-size:13px;">📷 选择图片</label>';
             html += '<input type="file" id="reviewImageInput" accept="image/*" multiple style="display:none;" onchange="ClientPages._handleReviewImages(event)">';
             html += '<span style="font-size:11px;color:#999;margin-left:8px;">支持 JPG/PNG，每张不超过5MB</span>';
             html += '</div>';
 
-            // 标签
             html += '<div style="margin:12px 0;">';
             html += '<label style="display:block;font-size:13px;color:#666;margin-bottom:4px;">标签（点击选择）</label>';
             html += '<div style="display:flex;gap:6px;flex-wrap:wrap;" id="reviewTags">';
@@ -989,7 +985,7 @@ window.ClientPages = {
     },
 
     // ================================================================
-    // 商品详情
+    // ★★★ 商品详情弹窗（完全对齐拼多多） ★★★
     // ================================================================
     showProductDetail: function(productId) {
         var self = this;
@@ -1002,6 +998,7 @@ window.ClientPages = {
             }
 
             self._currentProductId = productId;
+            self._currentReviewPage = 1;
             var user = Auth.getCurrentUser();
             var isFavorited = false;
 
@@ -1053,6 +1050,7 @@ window.ClientPages = {
 
         var html = '<div class="modal-title">' + (product.emoji || '🥬') + ' ' + product.name + '</div>';
 
+        // 图片轮播
         if (images.length > 0) {
             html += '<div style="position:relative;overflow:hidden;border-radius:8px;margin-bottom:8px;">';
             html += '<div id="productImageCarousel" style="display:flex;overflow-x:auto;scroll-snap-type:x mandatory;gap:4px;padding:4px 0;">';
@@ -1072,6 +1070,7 @@ window.ClientPages = {
             html += '<div style="text-align:center;font-size:56px;padding:8px 0;">' + (product.emoji || '🥬') + '</div>';
         }
 
+        // 基本信息
         html += '<div style="display:flex;justify-content:space-between;padding:4px 0;"><span>价格</span><span style="font-weight:600;color:#ff3b30;">' + Utils.formatPrice(product.price) + '/' + (product.unit || '份') + '</span></div>';
         html += '<div style="display:flex;justify-content:space-between;padding:4px 0;"><span>库存</span><span>' + stockText + '</span></div>';
         html += '<div style="display:flex;justify-content:space-between;padding:4px 0;"><span>分类</span><span>' + (product.category || '未分类') + '</span></div>';
@@ -1083,10 +1082,13 @@ window.ClientPages = {
         if (product.description) {
             html += '<div style="padding:4px 0;color:var(--text-secondary);">📝 ' + product.description + '</div>';
         }
+
+        // ★★★ 好评率 ★★★
         if (reviewCount > 0) {
             html += '<div style="padding:4px 0;border-top:1px solid #f0f0f0;margin-top:4px;">⭐ 好评率 ' + (avgRating * 20).toFixed(0) + '%（' + reviewCount + '条评价）</div>';
         }
 
+        // ★★★ 规格选择 ★★★
         if (specs && specs.length > 0) {
             html += '<div style="margin:8px 0;padding:8px;background:#f8f9fa;border-radius:6px;">';
             html += '<div style="font-size:13px;font-weight:500;margin-bottom:4px;">选择规格</div>';
@@ -1116,8 +1118,18 @@ window.ClientPages = {
             html += '<div style="padding:4px 0;color:var(--primary);">🛒 已选 ' + inCart + ' 份</div>';
         }
 
-        html += '<div id="productReviewsPreview" style="margin-top:8px;max-height:120px;overflow-y:auto;border-top:1px solid #f0f0f0;padding-top:8px;"></div>';
+        // ★★★ 评价预览 + 查看全部（拼多多风格） ★★★
+        html += '<div id="productReviewsPreview" style="margin-top:8px;border-top:1px solid #f0f0f0;padding-top:8px;max-height:200px;overflow-y:auto;">';
+        html += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">';
+        html += '<span style="font-size:13px;font-weight:500;">用户评价</span>';
+        if (reviewCount > 3) {
+            html += '<span onclick="ClientPages._loadMoreReviews(\'' + product.id + '\')" style="font-size:12px;color:var(--primary);cursor:pointer;">查看全部 ›</span>';
+        }
+        html += '</div>';
+        html += '<div id="reviewListContainer"><div style="font-size:12px;color:#999;">加载中...</div></div>';
+        html += '</div>';
 
+        // 收藏 + 购物车按钮
         html += '<div class="form-actions" style="margin-top:12px;">';
         html += '<button class="btn-cancel" onclick="window.closeModal()">关闭</button>';
         html += '<button style="flex:1;padding:10px;border-radius:10px;font-weight:600;background:transparent;color:#ff6b00;border:1px solid #ff6b00;cursor:pointer;" onclick="ClientPages.toggleFavorite(\'' + product.id + '\', this)">' + (isFavorited ? '❤️ 已收藏' : '🤍 收藏') + '</button>';
@@ -1133,30 +1145,98 @@ window.ClientPages = {
         var overlay = document.getElementById('modalOverlay');
         if (overlay) overlay.classList.add('active');
 
-        DataService.getProductReviews(product.id, 'latest', null, 1, 3).then(function(result) {
-            var container = document.getElementById('productReviewsPreview');
+        // ★★★ 加载评价（含图片） ★★★
+        DataService.getProductReviews(product.id, 'latest', null, 1, 5).then(function(result) {
+            self._currentReviews = result.reviews || [];
+            var container = document.getElementById('reviewListContainer');
             if (!container) return;
-            if (!result.reviews || result.reviews.length === 0) {
+            if (!self._currentReviews || self._currentReviews.length === 0) {
                 container.innerHTML = '<div style="font-size:12px;color:#999;">暂无评价</div>';
                 return;
             }
-            var reviewsHtml = result.reviews.map(function(r) {
+            var reviewsHtml = self._currentReviews.map(function(r) {
+                var stars = '';
+                for (var i = 0; i < 5; i++) {
+                    stars += i < r.rating ? '★' : '☆';
+                }
+                // ★★★ 评价图片 ★★★
+                var imgHtml = '';
+                if (r.images && r.images.length > 0) {
+                    var imgs = Array.isArray(r.images) ? r.images : JSON.parse(r.images);
+                    if (imgs && imgs.length > 0) {
+                        imgHtml = '<div style="display:flex;gap:4px;margin-top:4px;flex-wrap:wrap;">';
+                        imgs.slice(0, 3).forEach(function(imgUrl) {
+                            imgHtml += '<img src="' + imgUrl + '" style="width:48px;height:48px;border-radius:4px;object-fit:cover;border:1px solid #eee;" onerror="this.style.display=\'none\'">';
+                        });
+                        if (imgs.length > 3) {
+                            imgHtml += '<span style="font-size:11px;color:#999;display:flex;align-items:center;">+' + (imgs.length - 3) + '</span>';
+                        }
+                        imgHtml += '</div>';
+                    }
+                }
+                return '<div style="padding:6px 0;border-bottom:1px solid #f5f5f5;font-size:13px;">' +
+                    '<span style="color:#ff6b00;">' + stars + '</span> ' +
+                    '<span style="font-size:12px;color:#999;">' + (r.user_phone ? r.user_phone.slice(-4) : '用户') + '</span>' +
+                    '<div style="margin-top:2px;">' + r.content + '</div>' +
+                    imgHtml +
+                    (r.reply ? '<div style="font-size:12px;color:#666;background:#f8f8f8;padding:4px 8px;border-radius:4px;margin-top:2px;">商家回复：' + r.reply + '</div>' : '') +
+                    '</div>';
+            }).join('');
+            container.innerHTML = reviewsHtml;
+        }).catch(function() {
+            var container = document.getElementById('reviewListContainer');
+            if (container) container.innerHTML = '<div style="font-size:12px;color:#999;">加载评价失败</div>';
+        });
+    },
+
+    _loadMoreReviews: function(productId) {
+        var self = this;
+        self._currentReviewPage++;
+        DataService.getProductReviews(productId, 'latest', null, self._currentReviewPage, 10).then(function(result) {
+            if (!result.reviews || result.reviews.length === 0) {
+                Utils.toast('没有更多评价了');
+                return;
+            }
+            var container = document.getElementById('reviewListContainer');
+            if (!container) return;
+            var newReviews = result.reviews || [];
+            self._currentReviews = self._currentReviews.concat(newReviews);
+            var reviewsHtml = self._currentReviews.map(function(r) {
                 var stars = '';
                 for (var i = 0; i < 5; i++) {
                     stars += i < r.rating ? '★' : '☆';
                 }
                 var imgHtml = '';
                 if (r.images && r.images.length > 0) {
-                    imgHtml = ' <span style="font-size:11px;color:#999;">📷</span>';
+                    var imgs = Array.isArray(r.images) ? r.images : JSON.parse(r.images);
+                    if (imgs && imgs.length > 0) {
+                        imgHtml = '<div style="display:flex;gap:4px;margin-top:4px;flex-wrap:wrap;">';
+                        imgs.slice(0, 3).forEach(function(imgUrl) {
+                            imgHtml += '<img src="' + imgUrl + '" style="width:48px;height:48px;border-radius:4px;object-fit:cover;border:1px solid #eee;" onerror="this.style.display=\'none\'">';
+                        });
+                        if (imgs.length > 3) {
+                            imgHtml += '<span style="font-size:11px;color:#999;display:flex;align-items:center;">+' + (imgs.length - 3) + '</span>';
+                        }
+                        imgHtml += '</div>';
+                    }
                 }
-                return '<div style="padding:4px 0;border-bottom:1px solid #f5f5f5;font-size:13px;">' +
+                return '<div style="padding:6px 0;border-bottom:1px solid #f5f5f5;font-size:13px;">' +
                     '<span style="color:#ff6b00;">' + stars + '</span> ' +
-                    '<span>' + r.content + '</span>' +
+                    '<span style="font-size:12px;color:#999;">' + (r.user_phone ? r.user_phone.slice(-4) : '用户') + '</span>' +
+                    '<div style="margin-top:2px;">' + r.content + '</div>' +
                     imgHtml +
+                    (r.reply ? '<div style="font-size:12px;color:#666;background:#f8f8f8;padding:4px 8px;border-radius:4px;margin-top:2px;">商家回复：' + r.reply + '</div>' : '') +
                     '</div>';
             }).join('');
             container.innerHTML = reviewsHtml;
-        }).catch(function() {});
+            if (result.reviews.length < 10) {
+                Utils.toast('已加载全部评价');
+            } else {
+                Utils.toast('已加载更多评价');
+            }
+        }).catch(function(err) {
+            Utils.toast('加载评价失败: ' + err.message);
+        });
     },
 
     _selectSpec: function(el, specId, price, stock) {
@@ -1184,6 +1264,9 @@ window.ClientPages = {
         window.closeModal();
     },
 
+    // ================================================================
+    // 收藏
+    // ================================================================
     toggleFavorite: function(productId, btn) {
         var user = Auth.getCurrentUser();
         if (!user) {
@@ -1235,6 +1318,9 @@ window.ClientPages = {
         });
     },
 
+    // ================================================================
+    // 优惠券
+    // ================================================================
     renderCoupons: function() {
         var user = Auth.getCurrentUser();
         DataService.getCoupons(user ? user.id : null).then(function(result) {
@@ -1844,8 +1930,6 @@ window.ClientPages = {
         if (district && district !== city) fullAddressParts.push(district);
         if (address) fullAddressParts.push(address);
         var fullAddress = fullAddressParts.join('');
-
-        console.log('📝 完整地址（省市区+详细地址）:', fullAddress);
 
         var finalData = {
             id: this.editingAddressId || undefined,

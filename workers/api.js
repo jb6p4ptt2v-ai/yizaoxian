@@ -1,6 +1,6 @@
 // ============================================================
-// 宜早鲜 Cloudflare Workers API - v5.3 完整版
-// 包含：用户、地址、供应商、商品、规格、搜索、收藏、订单（含提货码）、物流、评价、地区、优惠券、消息、售后、库存、财务、备份、管理员
+// 宜早鲜 Cloudflare Workers API - v5.4 完整版
+// 包含：用户、地址、供应商、商品、规格、搜索、收藏、订单（含提货码）、物流、评价（含R2真实上传）、地区、优惠券、消息、售后、库存、财务、备份、管理员
 // ============================================================
 
 export default {
@@ -565,7 +565,7 @@ export default {
                 });
             }
 
-            // ★★★ 新增 DELETE /orders 路由 ★★★
+            // DELETE /orders
             if (path === '/orders' && method === 'DELETE') {
                 const id = url.searchParams.get('id');
                 if (!id) {
@@ -675,8 +675,9 @@ export default {
                     headers: { ...corsHeaders, 'Content-Type': 'application/json' }
                 });
             }
+
             // ============================================================
-            // ★★★ 评价模块（含图片上传模拟） ★★★
+            // ★★★ 评价模块（含真实R2图片上传） ★★★
             // ============================================================
             if (path === '/reviews/upload-url' && method === 'POST') {
                 const body = await request.json();
@@ -691,39 +692,43 @@ export default {
                 const ext = filename.split('.').pop() || 'jpg';
                 const key = `reviews/${userId}/${Date.now()}_${Math.random().toString(36).slice(2, 8)}.${ext}`;
 
-                let uploadUrl = '';
-                let publicUrl = '';
-
-                if (env.BUCKET) {
-                    try {
-                        const urlObj = await env.BUCKET.createPresignedUrl(key, {
-                            expiry: 300,
-                            method: 'PUT',
-                            headers: {
-                                'Content-Type': contentType || 'image/jpeg',
-                            },
-                        });
-                        uploadUrl = urlObj.toString();
-                        publicUrl = `https://yizaoxian.${env.BUCKET.domain}/` + key;
-                    } catch (e) {
-                        console.error('生成预签名URL失败:', e);
-                        uploadUrl = 'https://mock-r2.example.com/' + key;
-                        publicUrl = 'https://mock-r2.example.com/' + key;
-                    }
-                } else {
-                    console.warn('R2未配置，返回模拟URL');
-                    uploadUrl = 'https://mock-r2.example.com/' + key;
-                    publicUrl = 'https://mock-r2.example.com/' + key;
+                // ★★★ 检查是否绑定了 R2 ★★★
+                if (!env.BUCKET) {
+                    return new Response(JSON.stringify({ error: 'R2存储未配置，请在Worker绑定中设置BUCKET' }), {
+                        status: 500,
+                        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+                    });
                 }
 
-                return new Response(JSON.stringify({
-                    success: true,
-                    uploadUrl: uploadUrl,
-                    publicUrl: publicUrl,
-                    key: key
-                }), {
-                    headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-                });
+                try {
+                    // ★★★ 生成真实预签名URL ★★★
+                    const urlObj = await env.BUCKET.createPresignedUrl(key, {
+                        expiry: 300, // 5分钟有效
+                        method: 'PUT',
+                        headers: {
+                            'Content-Type': contentType || 'image/jpeg',
+                        },
+                    });
+                    const uploadUrl = urlObj.toString();
+                    // 构造公开访问URL（如果桶是公共读的）
+                    // 注意：需要根据实际R2域名替换，或使用绑定的自定义域名
+                    const publicUrl = `https://yizaoxian.${env.BUCKET.domain}/` + key;
+
+                    return new Response(JSON.stringify({
+                        success: true,
+                        uploadUrl: uploadUrl,
+                        publicUrl: publicUrl,
+                        key: key
+                    }), {
+                        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+                    });
+                } catch (e) {
+                    console.error('生成预签名URL失败:', e);
+                    return new Response(JSON.stringify({ error: '生成上传链接失败: ' + e.message }), {
+                        status: 500,
+                        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+                    });
+                }
             }
 
             if (path === '/reviews' && method === 'POST') {

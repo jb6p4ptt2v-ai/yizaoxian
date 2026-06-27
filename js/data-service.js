@@ -1,6 +1,6 @@
 /**
  * 数据服务层 - 调用 Cloudflare Workers API
- * 完整版 v5.1 - 模拟图片上传（R2 未配置时自动降级）
+ * 完整版 v5.4 - 移除图片上传降级，使用真实R2
  */
 window.DataService = {
     _getApiBase: function() {
@@ -191,6 +191,10 @@ window.DataService = {
         return this._request('/orders/status', 'PUT', { orderId: orderId, status: status });
     },
 
+    deleteOrder: function(id) {
+        return this._request('/orders?id=' + id, 'DELETE');
+    },
+
     reorder: function(orderId, userId) {
         return this._request('/orders/reorder', 'POST', { orderId: orderId, userId: userId });
     },
@@ -205,10 +209,8 @@ window.DataService = {
     },
 
     // ================================================================
-    // 评价模块（含图片上传模拟）
+    // ★★★ 评价模块（真实R2上传，无降级） ★★★
     // ================================================================
-
-    // 获取图片上传预签名URL（若R2未配置，返回模拟URL）
     getReviewUploadUrl: function(userId, filename, contentType) {
         return this._request('/reviews/upload-url', 'POST', {
             userId: userId,
@@ -217,15 +219,8 @@ window.DataService = {
         });
     },
 
-    // 上传图片到R2（若上传失败，自动降级为模拟成功）
+    // ★★★ 真实上传，无模拟降级 ★★★
     uploadReviewImage: function(uploadUrl, file) {
-        // 如果是模拟URL（mock-r2.example.com），直接返回成功，无需实际请求
-        if (uploadUrl.indexOf('mock-r2.example.com') !== -1) {
-            console.warn('⚠️ R2存储未配置，使用模拟图片URL');
-            // 返回一个模拟的图片URL（占位图）
-            return Promise.resolve(true);
-        }
-
         return fetch(uploadUrl, {
             method: 'PUT',
             body: file,
@@ -236,10 +231,6 @@ window.DataService = {
             if (!res.ok) {
                 throw new Error('上传失败: ' + res.status);
             }
-            return true;
-        }).catch(function(err) {
-            console.warn('⚠️ 图片上传失败，降级为模拟成功:', err.message);
-            // 降级：仍然返回成功，避免阻塞评价流程
             return true;
         });
     },

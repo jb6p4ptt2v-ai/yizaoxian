@@ -99,7 +99,7 @@ window.AdminPages = {
     },
 
     // ================================================================
-    // 供应商管理（★ 完整地址显示 + 定位对齐拼多多 ★）
+    // 供应商管理
     // ================================================================
     renderSuppliers: function() {
         var el = document.getElementById('admin-suppliers');
@@ -120,7 +120,6 @@ window.AdminPages = {
                 html += '<table class="admin-table"><thead><tr><th>名称</th><th>联系人</th><th>电话</th><th>地址</th><th>操作</th></tr></thead><tbody>';
                 list.forEach(function(s) {
                     if (!s) return;
-                    // ★★★ 拼接完整地址 ★★★
                     var fullAddress = '';
                     var parts = [];
                     if (s.province) parts.push(s.province);
@@ -143,7 +142,6 @@ window.AdminPages = {
         });
     },
 
-    // ★★★ 供应商弹窗（定位使用 LocationHelper，保存时拼接完整地址） ★★★
     openSupplierModal: function(id) {
         var self = this;
         var promise = id ? DataService.getSuppliers().then(function(list) {
@@ -199,7 +197,6 @@ window.AdminPages = {
         });
     },
 
-    // ★★★ 保存供应商（拼接完整地址到 address 字段） ★★★
     saveSupplier: function(id) {
         var nameInput = document.getElementById('f_sup_name');
         var contactInput = document.getElementById('f_sup_contact');
@@ -230,7 +227,6 @@ window.AdminPages = {
             }
         }
 
-        // ★★★ 拼接完整地址 ★★★
         var fullAddressParts = [];
         if (province) fullAddressParts.push(province);
         if (city && city !== province) fullAddressParts.push(city);
@@ -242,7 +238,7 @@ window.AdminPages = {
             name: name,
             contact: contact,
             phone: phone,
-            address: fullAddress,        // ★ 保存完整地址
+            address: fullAddress,
             lng: lng,
             lat: lat,
             province: province,
@@ -271,7 +267,7 @@ window.AdminPages = {
     },
 
     // ================================================================
-    // 商品管理
+    // ★★★ 商品管理（含规格管理 + 真实图片上传） ★★★
     // ================================================================
     renderProducts: function() {
         var el = document.getElementById('admin-products');
@@ -331,6 +327,7 @@ window.AdminPages = {
             var isEdit = !!data;
             var html = '<div class="modal-title">' + (isEdit ? '编辑商品' : '添加商品') + '</div>';
 
+            // 基本信息
             html += '<div style="border-bottom:2px solid var(--primary);padding-bottom:8px;margin-bottom:12px;font-weight:500;">📦 基本信息</div>';
 
             html += '<div class="form-group"><label>商品名称 *</label><input id="f_prod_name" value="' + (data ? data.name : '') + '" placeholder="如：有机小白菜"></div>';
@@ -365,8 +362,8 @@ window.AdminPages = {
 
             html += '<div class="form-group"><label>今日可提</label><input type="checkbox" id="f_prod_today" ' + (data && data.today_pickup !== 0 ? 'checked' : '') + '> ✅ 今日可提</div>';
 
-            // 图片管理
-            html += '<div style="border-bottom:2px solid var(--primary);padding-bottom:8px;margin:16px 0 12px;font-weight:500;">🖼️ 商品图片</div>';
+            // ★★★ 图片管理（真实R2上传） ★★★
+            html += '<div style="border-bottom:2px solid var(--primary);padding-bottom:8px;margin:16px 0 12px;font-weight:500;">🖼️ 商品图片（最多6张）</div>';
             html += '<div id="productImageList" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px;">';
             if (data && data.images) {
                 try {
@@ -387,12 +384,14 @@ window.AdminPages = {
                 html += '<span style="color:#999;font-size:13px;">暂无图片</span>';
             }
             html += '</div>';
-            html += '<div style="display:flex;gap:8px;flex-wrap:wrap;">' +
-                '<label style="background:var(--primary);color:#fff;padding:4px 16px;border-radius:6px;cursor:pointer;font-size:12px;">📷 上传图片<input type="file" accept="image/*" multiple onchange="AdminPages._handleProductImages(event, \'' + (data ? data.id : '') + '\')" style="display:none;"></label>' +
-                '<span style="font-size:11px;color:#999;">支持多张，每张不超过5MB</span>' +
+
+            // 图片上传区域
+            html += '<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">' +
+                '<label style="background:var(--primary);color:#fff;padding:4px 16px;border-radius:6px;cursor:pointer;font-size:12px;">📷 上传图片<input type="file" id="productImageInput" accept="image/*" multiple style="display:none;" onchange="AdminPages._handleProductImages(event, \'' + (data ? data.id : '') + '\')"></label>' +
+                '<span style="font-size:11px;color:#999;">支持多张，每张不超过5MB，上传后自动保存</span>' +
                 '</div>';
 
-            // 规格管理
+            // ★★★ 规格管理 ★★★
             html += '<div style="border-bottom:2px solid var(--primary);padding-bottom:8px;margin:16px 0 12px;font-weight:500;">📐 规格管理</div>';
             html += '<div id="specList" style="margin-bottom:8px;">';
             html += '<div style="display:flex;gap:8px;flex-wrap:wrap;font-size:13px;color:#666;">';
@@ -416,6 +415,7 @@ window.AdminPages = {
             var overlay = document.getElementById('modalOverlay');
             if (overlay) overlay.classList.add('active');
 
+            // 加载供应商列表
             DataService.getSuppliers().then(function(suppliers) {
                 var sel = document.getElementById('f_prod_supplier');
                 if (!sel) return;
@@ -431,6 +431,7 @@ window.AdminPages = {
                 });
             });
 
+            // 加载规格列表
             if (id) {
                 DataService.getProductSpecs(id).then(function(specs) {
                     self._renderSpecList(specs, id);
@@ -438,6 +439,9 @@ window.AdminPages = {
                     document.getElementById('specLoading').textContent = '加载失败';
                 });
             }
+
+            // ★★★ 保存当前商品ID供图片上传使用 ★★★
+            window._currentProductId = data ? data.id : null;
         });
     },
 
@@ -496,8 +500,92 @@ window.AdminPages = {
             });
     },
 
+    // ★★★ 图片上传处理（真实R2上传） ★★★
     _handleProductImages: function(event, productId) {
-        Utils.toast('图片上传功能开发中，请使用R2存储');
+        var files = event.target.files;
+        if (!files || files.length === 0) return;
+
+        var self = this;
+        var userId = Auth.getCurrentAdmin()?.id || 'admin';
+        Utils.toast('⏳ 正在上传图片...');
+
+        var uploadPromises = [];
+        var uploadedUrls = [];
+
+        for (var i = 0; i < files.length; i++) {
+            var file = files[i];
+            if (!file.type.startsWith('image/')) {
+                Utils.toast('请选择图片文件');
+                continue;
+            }
+            if (file.size > 5 * 1024 * 1024) {
+                Utils.toast('图片不能超过5MB');
+                continue;
+            }
+
+            var promise = DataService.getReviewUploadUrl(userId, file.name, file.type)
+                .then(function(result) {
+                    if (result.success && result.uploadUrl) {
+                        return DataService.uploadReviewImage(result.uploadUrl, file)
+                            .then(function() {
+                                return result.publicUrl;
+                            });
+                    }
+                    return null;
+                })
+                .catch(function(err) {
+                    console.warn('图片上传失败:', err);
+                    return null;
+                });
+
+            uploadPromises.push(promise);
+        }
+
+        Promise.all(uploadPromises).then(function(urls) {
+            var validUrls = urls.filter(function(url) { return url; });
+            if (validUrls.length === 0) {
+                Utils.toast('❌ 图片上传失败，请重试');
+                return;
+            }
+
+            // 获取当前商品已有的图片
+            DataService.getProducts().then(function(products) {
+                var product = products.find(function(p) { return p.id === productId; });
+                var existingImages = [];
+                if (product && product.images) {
+                    try {
+                        existingImages = JSON.parse(product.images);
+                        if (!Array.isArray(existingImages)) existingImages = [];
+                    } catch(e) { existingImages = []; }
+                }
+
+                var allImages = existingImages.concat(validUrls);
+                // 限制最多6张
+                if (allImages.length > 6) {
+                    allImages = allImages.slice(0, 6);
+                    Utils.toast('最多保留6张图片，已自动裁剪');
+                }
+
+                // 更新商品图片
+                var productData = {
+                    id: productId,
+                    images: JSON.stringify(allImages)
+                };
+
+                // 只更新图片字段
+                DataService.saveProduct(productData).then(function() {
+                    Utils.toast('✅ 图片上传成功！共 ' + validUrls.length + ' 张');
+                    AdminPages.openProductModal(productId);
+                }).catch(function(err) {
+                    Utils.toast('保存图片失败: ' + err.message);
+                });
+            }).catch(function(err) {
+                Utils.toast('获取商品信息失败: ' + err.message);
+            });
+        }).catch(function(err) {
+            Utils.toast('上传失败: ' + err.message);
+        });
+
         event.target.value = '';
     },
 
@@ -534,27 +622,47 @@ window.AdminPages = {
         if (!name) { Utils.toast('请输入商品名称'); return; }
         if (isNaN(price) || price < 0) { Utils.toast('请输入有效的价格'); return; }
 
-        var data = {
-            name: name,
-            price: price,
-            stock: stock,
-            category: category,
-            unit: unit,
-            supplierId: supplierId,
-            emoji: emoji,
-            description: description,
-            origin: origin,
-            is_hot: isHot,
-            today_pickup: todayPickup
-        };
-        if (id) data.id = id;
-        DataService.saveProduct(data).then(function() {
-            Utils.toast('✅ 商品已保存');
-            window.closeModal();
-            AdminPages.render('products');
-        }).catch(function(err) {
-            Utils.toast('保存失败: ' + err.message);
-        });
+        // 保留现有图片
+        var existingImages = '[]';
+        if (id) {
+            DataService.getProducts().then(function(products) {
+                var product = products.find(function(p) { return p.id === id; });
+                if (product && product.images) {
+                    existingImages = product.images;
+                }
+                // 继续保存
+                _doSave();
+            }).catch(function() {
+                _doSave();
+            });
+        } else {
+            _doSave();
+        }
+
+        function _doSave() {
+            var data = {
+                name: name,
+                price: price,
+                stock: stock,
+                category: category,
+                unit: unit,
+                supplierId: supplierId,
+                emoji: emoji,
+                description: description,
+                origin: origin,
+                is_hot: isHot,
+                today_pickup: todayPickup,
+                images: existingImages
+            };
+            if (id) data.id = id;
+            DataService.saveProduct(data).then(function() {
+                Utils.toast('✅ 商品已保存');
+                window.closeModal();
+                AdminPages.render('products');
+            }).catch(function(err) {
+                Utils.toast('保存失败: ' + err.message);
+            });
+        }
     },
 
     deleteProduct: function(id) {
