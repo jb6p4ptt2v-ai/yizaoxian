@@ -420,12 +420,13 @@ window.ClientPages = {
                 if (!addr) return;
                 var tagDisplay = addr.tag ? ' [' + addr.tag + ']' : '';
                 var lastUsedDisplay = addr.last_used ? ' <span style="font-size:11px;color:var(--text-secondary);">上次使用</span>' : '';
+                // ★★★ 地址拼接使用空格分隔 ★★★
                 var parts = [];
                 if (addr.province) parts.push(addr.province);
                 if (addr.city && addr.city !== addr.province) parts.push(addr.city);
                 if (addr.district && addr.district !== addr.city) parts.push(addr.district);
                 if (addr.address) parts.push(addr.address);
-                var fullDisplayAddress = parts.join('');
+                var fullDisplayAddress = parts.join(' ');
                 html += '<div style="padding:10px;border:1px solid var(--border);border-radius:8px;margin-bottom:8px;display:flex;justify-content:space-between;align-items:center;">' +
                     '<div><div><strong>' + (addr.name || '') + '</strong> ' + (addr.phone || '') + tagDisplay + (addr.is_default ? ' <span style="color:var(--primary);font-size:12px;">默认</span>' : '') + lastUsedDisplay + '</div>' +
                     '<div style="font-size:13px;color:var(--text-secondary);">' + fullDisplayAddress + '</div></div>' +
@@ -497,12 +498,13 @@ window.ClientPages = {
 
                 if (!stockOk || !items.length) return;
 
+                // ★★★ 地址拼接空格分隔 ★★★
                 var parts = [];
                 if (addr.province) parts.push(addr.province);
                 if (addr.city && addr.city !== addr.province) parts.push(addr.city);
                 if (addr.district && addr.district !== addr.city) parts.push(addr.district);
                 if (addr.address) parts.push(addr.address);
-                var fullAddress = parts.join('');
+                var fullAddress = parts.join(' ');
 
                 var updateData = {
                     id: addr.id,
@@ -1568,7 +1570,7 @@ window.ClientPages = {
     },
 
     // ================================================================
-    // 地址管理（修复回填可靠性）
+    // 地址管理（显示空格分隔，定位联动）
     // ================================================================
     showAddressManager: function() {
         var user = Auth.getCurrentUser();
@@ -1608,12 +1610,13 @@ window.ClientPages = {
                 var defaultBadge = addr.is_default ? ' <span class="address-default-badge">默认</span>' : '';
                 var lastUsedBadge = addr.last_used ? ' <span class="address-lastused">上次使用</span>' : '';
 
+                // ★★★ 地址拼接使用空格分隔 ★★★
                 var parts = [];
                 if (addr.province) parts.push(addr.province);
                 if (addr.city && addr.city !== addr.province) parts.push(addr.city);
                 if (addr.district && addr.district !== addr.city) parts.push(addr.district);
                 if (addr.address) parts.push(addr.address);
-                var fullAddress = parts.join('');
+                var fullAddress = parts.join(' ');
 
                 html += '<div class="address-item-wrapper" data-id="' + addr.id + '">' +
                     '<div class="address-item">' +
@@ -1934,6 +1937,7 @@ window.ClientPages = {
             return;
         }
 
+        // address 字段只存详细地址
         var finalData = {
             id: this.editingAddressId || undefined,
             name: name,

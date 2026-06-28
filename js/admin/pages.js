@@ -99,7 +99,7 @@ window.AdminPages = {
     },
 
     // ================================================================
-    // 供应商管理（地址存储分离，显示拼接）
+    // 供应商管理（地址显示空格分隔，存储只存详细地址）
     // ================================================================
     renderSuppliers: function() {
         var el = document.getElementById('admin-suppliers');
@@ -120,12 +120,13 @@ window.AdminPages = {
                 html += '<table class="admin-table"><thead><tr><th>名称</th><th>联系人</th><th>电话</th><th>地址</th><th>操作</th></tr></thead><tbody>';
                 list.forEach(function(s) {
                     if (!s) return;
+                    // ★★★ 地址拼接使用空格分隔 ★★★
                     var parts = [];
                     if (s.province) parts.push(s.province);
                     if (s.city && s.city !== s.province) parts.push(s.city);
                     if (s.district && s.district !== s.city) parts.push(s.district);
                     if (s.address) parts.push(s.address);
-                    var fullAddress = parts.join('');
+                    var fullAddress = parts.join(' ');
 
                     html += '<tr><td>' + (s.name || '') + '</td><td>' + (s.contact || '-') + '</td><td>' + (s.phone || '-') + '</td><td style="font-size:12px;">' + fullAddress + '</td>' +
                         '<td><div class="actions"><button class="primary" onclick="AdminPages.openSupplierModal(\'' + s.id + '\')">编辑</button><button class="danger" onclick="AdminPages.deleteSupplier(\'' + s.id + '\')">删除</button></div></td></tr>';
@@ -231,7 +232,7 @@ window.AdminPages = {
             name: name,
             contact: contact,
             phone: phone,
-            address: address,
+            address: address, // 只存详细地址
             lng: lng,
             lat: lat,
             province: province,
@@ -260,7 +261,7 @@ window.AdminPages = {
     },
 
     // ================================================================
-    // 商品管理（图片上传改用 Worker 代理，同步后刷新区域数据）
+    // 商品管理（图片上传 Worker 代理）
     // ================================================================
     renderProducts: function() {
         var el = document.getElementById('admin-products');
@@ -304,6 +305,11 @@ window.AdminPages = {
             el.innerHTML = '<div class="admin-card"><div class="card-title">商品管理</div><p>加载失败: ' + err.message + '</p></div>';
         });
     },
+
+    // ================================================================
+       // ================================================================
+    // 商品管理 - 打开编辑框（含图片上传规格管理）
+    // ================================================================
     openProductModal: function(id) {
         if (!this._hasPermission('products')) {
             Utils.toast('您没有权限操作商品');
@@ -1185,7 +1191,6 @@ window.AdminPages = {
                 if (result.success) {
                     resultEl.innerHTML = '✅ 同步完成！新增' + result.inserted + ' 条，跳过 ' + result.skipped + ' 条';
                     Utils.toast('✅ 地区数据同步成功');
-                    // 刷新 RegionData
                     if (window.RegionData && window.RegionData.reloadData) {
                         window.RegionData.reloadData();
                     }
