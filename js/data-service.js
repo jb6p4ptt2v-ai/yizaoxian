@@ -1,6 +1,6 @@
 /**
  * 数据服务层 - 调用 Cloudflare Workers API
- * 完整版 v5.6 - 清理废弃上传方法
+ * 完整版 v5.6 - 清理废弃上传方法，错误信息友好化
  */
 window.DataService = {
     _getApiBase: function() {
@@ -19,7 +19,20 @@ window.DataService = {
                 if (!res.ok) {
                     return res.text().then(function(text) {
                         var errMsg = '请求失败';
-                        try { var json = JSON.parse(text); errMsg = json.error || json.message || '请求失败'; } catch(e) { errMsg = text || '请求失败'; }
+                        try {
+                            var json = JSON.parse(text);
+                            errMsg = json.error || json.message || '请求失败';
+                            // 对常见错误进行友好化
+                            if (errMsg === '已评价过该商品') {
+                                errMsg = '您已经评价过该商品，请勿重复提交';
+                            } else if (errMsg === '该手机号已注册') {
+                                errMsg = '该手机号已被注册，请直接登录';
+                            } else if (errMsg === '用户名或密码错误') {
+                                errMsg = '用户名或密码错误，请重新输入';
+                            }
+                        } catch(e) {
+                            errMsg = text || '请求失败';
+                        }
                         throw new Error(errMsg);
                     });
                 }

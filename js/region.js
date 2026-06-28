@@ -8,18 +8,21 @@ window.RegionData = {
         this._loadData();
     },
 
-    // ================================================================
-    // 核心修改：使用 ID 逐级查询，正确组装省市区数据
-    // ================================================================
+    // 新增：重新加载数据（用于同步后刷新）
+    reloadData: function() {
+        this._data = null;
+        this._initialized = false;
+        this._loading = false;
+        this._loadData();
+    },
+
     _loadData: function() {
         if (this._loading) return;
         this._loading = true;
         var self = this;
 
-        // 初始化数据容器
         self._data = {};
 
-        // 1. 获取所有省份（level=1）
         DataService.getRegions('', 1).then(function(provinces) {
             if (!provinces || provinces.length === 0) {
                 self._fallbackData();
@@ -27,7 +30,6 @@ window.RegionData = {
             }
 
             var provincePromises = provinces.map(function(prov) {
-                // 2. 对每个省份，用其 ID 获取城市（level=2）
                 return DataService.getRegions(prov.id, 2).then(function(cities) {
                     if (!cities || cities.length === 0) {
                         self._data[prov.name] = {};
@@ -35,7 +37,6 @@ window.RegionData = {
                     }
 
                     var cityPromises = cities.map(function(city) {
-                        // 3. 对每个城市，用其 ID 获取区县（level=3）
                         return DataService.getRegions(city.id, 3).then(function(districts) {
                             return {
                                 cityName: city.name,
@@ -66,18 +67,7 @@ window.RegionData = {
         });
     },
 
-    // ================================================================
-    // 备用数据（仅保留常用省份，确保 UI 不报错，但强烈建议同步）
-    // ================================================================
     _fallbackData: function() {
-        this._data = this._buildFallbackData();
-        this._initialized = true;
-        this._loading = false;
-        console.warn('⚠️ RegionData 使用内置备用数据（仅少量省份）');
-    },
-
-    _buildFallbackData: function() {
-        // 保留原备用数据，但只包含省份名称，城市区县为空（提示同步）
         var provinces = ['北京市','上海市','天津市','重庆市','河北省','山西省','辽宁省','吉林省','黑龙江省',
                          '江苏省','浙江省','安徽省','福建省','江西省','山东省','河南省','湖北省','湖南省',
                          '广东省','海南省','四川省','贵州省','云南省','陕西省','甘肃省','青海省','台湾省',
@@ -85,12 +75,12 @@ window.RegionData = {
                          '香港特别行政区','澳门特别行政区'];
         var data = {};
         provinces.forEach(function(p) { data[p] = {}; });
-        return data;
+        this._data = data;
+        this._initialized = true;
+        this._loading = false;
+        console.warn('⚠️ RegionData 使用内置备用数据（仅少量省份）');
     },
 
-    // ================================================================
-    // 以下方法保持不变（操作均基于 name 字符串，与数据结构无关）
-    // ================================================================
     getProvinces: function() {
         this.init();
         return Object.keys(this._data);
@@ -196,19 +186,18 @@ window.RegionData = {
             if (typeof pSel.onchange === 'function') pSel.onchange();
         }
         if (city) {
-            setTimeout(function() {
-                if (cSel.querySelector('option[value="' + city + '"]')) {
-                    cSel.value = city;
-                    if (typeof cSel.onchange === 'function') cSel.onchange();
-                }
-            }, 100);
+            // 确保 city 在选项中存在，否则不设置
+            var cityOption = cSel.querySelector('option[value="' + city + '"]');
+            if (cityOption) {
+                cSel.value = city;
+                if (typeof cSel.onchange === 'function') cSel.onchange();
+            }
         }
         if (district) {
-            setTimeout(function() {
-                if (dSel.querySelector('option[value="' + district + '"]')) {
-                    dSel.value = district;
-                }
-            }, 200);
+            var districtOption = dSel.querySelector('option[value="' + district + '"]');
+            if (districtOption) {
+                dSel.value = district;
+            }
         }
     },
 

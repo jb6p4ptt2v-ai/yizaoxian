@@ -103,6 +103,12 @@ window.Auth = {
                         window.location.href = 'admin.html';
                     } else {
                         window.location.reload();
+                        // 登录后刷新消息未读
+                        setTimeout(function() {
+                            if (window.ClientApp && window.ClientApp.updateMessageBadge) {
+                                window.ClientApp.updateMessageBadge();
+                            }
+                        }, 500);
                     }
                 } else {
                     errEl.textContent = result.error || '登录失败';

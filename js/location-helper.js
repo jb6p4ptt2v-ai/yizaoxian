@@ -2,10 +2,9 @@
  * 定位地址选择助手（拼多多风格 - 底部滑出弹窗）
  * 完全对齐拼多多收货地址定位交互：
  * 1. 点击"定位"后弹窗列表显示：黑色大字地点名称 + 灰色小字完整地址
- * 2. 详细地址填充不含省市前缀
+ * 2. 详细地址填充不含省市前缀，也不含区县名（去重）
  * 3. 最终地址显示：省市区 + 详细地址完整拼接
  * 4. 使用高德定位插件提高精度
- * 修复：详细地址去除区县名，避免重复
  */
 window.LocationHelper = (function() {
     'use strict';
@@ -34,9 +33,6 @@ window.LocationHelper = (function() {
         return _geocoder;
     }
 
-    /**
-     * 主入口：定位并选择地址
-     */
     function pickAddress(options) {
         if (!options || !options.addressInputId) {
             console.error('LocationHelper.pickAddress: 缺少 addressInputId');
@@ -92,7 +88,6 @@ window.LocationHelper = (function() {
 
                     var candidates = [];
 
-                    // 主地址（格式化地址）
                     if (formatted) {
                         var displayName = formatted;
                         var parts = formatted.split(' ');
@@ -114,7 +109,6 @@ window.LocationHelper = (function() {
                         });
                     }
 
-                    // 周边 POI（最多20个）
                     if (regeo.pois && regeo.pois.length > 0) {
                         regeo.pois.slice(0, 20).forEach(function(poi) {
                             var poiAddress = poi.address || '';
@@ -132,7 +126,6 @@ window.LocationHelper = (function() {
                         });
                     }
 
-                    // 如果候选列表为空，至少放一个格式化地址
                     if (candidates.length === 0 && formatted) {
                         var parts2 = formatted.split(' ');
                         var displayName2 = parts2.length > 1 ? parts2[parts2.length - 1] : formatted;
@@ -164,17 +157,12 @@ window.LocationHelper = (function() {
         });
     }
 
-    /**
-     * ★★★ 拼多多风格弹窗 - 底部滑出 ★★★
-     * 列表项：黑色大字（地点名称）+ 灰色小字（完整地址）
-     */
     function _showAddressPicker(candidates, lng, lat) {
         console.log('🖥️ 显示地址选择弹窗，候选数:', candidates.length);
 
         var oldModal = document.getElementById('pddAddressModal');
         if (oldModal) oldModal.remove();
 
-        // ---------- 背景遮罩 ----------
         var overlay = document.createElement('div');
         overlay.id = 'pddAddressModal';
         overlay.style.cssText = `
@@ -184,7 +172,6 @@ window.LocationHelper = (function() {
             animation: pddFadeIn 0.25s ease;
         `;
 
-        // ---------- 底部卡片 ----------
         var card = document.createElement('div');
         card.style.cssText = `
             background: #ffffff;
@@ -199,68 +186,32 @@ window.LocationHelper = (function() {
             overflow: hidden;
         `;
 
-        // ---------- 顶部拖拽指示器 ----------
         var dragHandle = document.createElement('div');
-        dragHandle.style.cssText = `
-            padding: 10px 0 4px 0;
-            display: flex;
-            justify-content: center;
-            flex-shrink: 0;
-        `;
+        dragHandle.style.cssText = `padding: 10px 0 4px 0; display: flex; justify-content: center; flex-shrink: 0;`;
         var dragBar = document.createElement('div');
-        dragBar.style.cssText = `
-            width: 36px;
-            height: 4px;
-            background: #ccc;
-            border-radius: 4px;
-        `;
+        dragBar.style.cssText = `width: 36px; height: 4px; background: #ccc; border-radius: 4px;`;
         dragHandle.appendChild(dragBar);
 
-        // ---------- 标题 ----------
         var header = document.createElement('div');
-        header.style.cssText = `
-            padding: 4px 18px 12px 18px;
-            font-size: 17px;
-            font-weight: 600;
-            color: #1a1a1a;
-            text-align: center;
-            flex-shrink: 0;
-            border-bottom: 1px solid #f0f0f0;
-        `;
+        header.style.cssText = `padding: 4px 18px 12px 18px; font-size: 17px; font-weight: 600; color: #1a1a1a; text-align: center; flex-shrink: 0; border-bottom: 1px solid #f0f0f0;`;
         header.textContent = _currentModalTitle;
 
-        // ---------- 搜索条 ----------
         var searchBar = document.createElement('div');
-        searchBar.style.cssText = `
-            padding: 10px 16px;
-            display: flex;
-            gap: 8px;
-            flex-shrink: 0;
-            background: #ffffff;
-        `;
+        searchBar.style.cssText = `padding: 10px 16px; display: flex; gap: 8px; flex-shrink: 0; background: #ffffff;`;
         searchBar.innerHTML = `
             <div style="flex:1;position:relative;display:flex;align-items:center;background:#f5f5f5;border-radius:20px;padding:0 14px;border:1px solid #e8e8e8;">
                 <span style="color:#999;font-size:14px;margin-right:6px;">🔍</span>
                 <input id="pickerSearchInput" placeholder="搜索地址" style="flex:1;padding:8px 0;border:none;background:transparent;font-size:14px;outline:none;color:#333;">
             </div>
-            <button id="pickerRefreshBtn" style="background:#f5f5f5;border:1px solid #e8e8e8;border-radius:50%;width:40px;height:40px;font-size:18px;cursor:pointer;display:flex;align-items:center;justify-content:center;color:#555;flex-shrink:0;" title="重新定位">
-                🔄
-            </button>
+            <button id="pickerRefreshBtn" style="background:#f5f5f5;border:1px solid #e8e8e8;border-radius:50%;width:40px;height:40px;font-size:18px;cursor:pointer;display:flex;align-items:center;justify-content:center;color:#555;flex-shrink:0;" title="重新定位">🔄</button>
         `;
 
-        // ---------- 地址列表（拼多多风格：黑色大字 + 灰色小字） ----------
         var listWrap = document.createElement('div');
         listWrap.id = 'pickerListWrap';
-        listWrap.style.cssText = `
-            overflow-y: auto;
-            padding: 4px 0 12px 0;
-            flex: 1;
-            -webkit-overflow-scrolling: touch;
-        `;
+        listWrap.style.cssText = `overflow-y: auto; padding: 4px 0 12px 0; flex: 1; -webkit-overflow-scrolling: touch;`;
 
         _renderListItems(listWrap, candidates);
 
-        // ---------- 组装 ----------
         card.appendChild(dragHandle);
         card.appendChild(header);
         card.appendChild(searchBar);
@@ -268,45 +219,20 @@ window.LocationHelper = (function() {
         overlay.appendChild(card);
         document.body.appendChild(overlay);
 
-        // ---------- 注入动画样式 ----------
         if (!document.getElementById('pickerStyle')) {
             var style = document.createElement('style');
             style.id = 'pickerStyle';
             style.textContent = `
                 @keyframes pddFadeIn { from { opacity: 0; } to { opacity: 1; } }
                 @keyframes pddSlideUp { from { transform: translateY(100%); } to { transform: translateY(0); } }
-                .picker-address-item {
-                    padding: 12px 18px;
-                    border-bottom: 1px solid #f0f0f0;
-                    cursor: pointer;
-                    transition: background 0.12s;
-                }
-                .picker-address-item:active {
-                    background: #f0f0f0;
-                }
-                .picker-address-item .name {
-                    font-size: 15px;
-                    font-weight: 500;
-                    color: #1a1a1a;
-                    line-height: 1.4;
-                }
-                .picker-address-item .address {
-                    font-size: 12px;
-                    color: #999;
-                    margin-top: 2px;
-                    line-height: 1.3;
-                }
-                .picker-empty {
-                    padding: 40px 20px;
-                    text-align: center;
-                    color: #999;
-                    font-size: 14px;
-                }
+                .picker-address-item { padding: 12px 18px; border-bottom: 1px solid #f0f0f0; cursor: pointer; transition: background 0.12s; }
+                .picker-address-item:active { background: #f0f0f0; }
+                .picker-address-item .name { font-size: 15px; font-weight: 500; color: #1a1a1a; line-height: 1.4; }
+                .picker-address-item .address { font-size: 12px; color: #999; margin-top: 2px; line-height: 1.3; }
+                .picker-empty { padding: 40px 20px; text-align: center; color: #999; font-size: 14px; }
             `;
             document.head.appendChild(style);
         }
-
-        // ---------- 事件绑定 ----------
 
         overlay.onclick = function(e) {
             if (e.target === overlay) {
@@ -419,9 +345,6 @@ window.LocationHelper = (function() {
         }
     }
 
-    /**
-     * ★★★ 渲染地址列表项（拼多多风格：黑色大字 + 灰色小字） ★★★
-     */
     function _renderListItems(container, candidates) {
         if (!container) return;
 
@@ -459,9 +382,6 @@ window.LocationHelper = (function() {
         container.innerHTML = html;
     }
 
-    /**
-     * ★★★ 搜索过滤地址列表 ★★★
-     */
     function _filterAddressList(keyword) {
         var listWrap = document.getElementById('pickerListWrap');
         if (!listWrap) return;
@@ -479,11 +399,6 @@ window.LocationHelper = (function() {
         _renderListItems(listWrap, filtered);
     }
 
-    /**
-     * ★★★ 选择地址（完全对齐拼多多） ★★★
-     * 1. 详细地址填充不含省市区前缀 → "市场监督管理局 玉阳街道玉阳路57号"（不含区县）
-     * 2. 最终显示：省市区 + 详细地址完整拼接 → "湖北省宜昌市当阳市市场监督管理局 玉阳街道玉阳路57号"
-     */
     function _selectAddress(name, fullAddress, province, city, district, street, detail, number) {
         console.log('✅ 用户选择了地址:', name);
         console.log('📍 完整地址:', fullAddress);
@@ -492,9 +407,7 @@ window.LocationHelper = (function() {
         var regionData = _currentRegionData;
         var onAddressPicked = _currentOnAddressPicked;
 
-        // ================================================================
-        // ★★★ 步骤1：填充省市联动 ★★★
-        // ================================================================
+        // 1. 填充省市联动
         if (regionData && typeof regionData.setSelected === 'function') {
             try {
                 regionData.setSelected(province, city, district);
@@ -503,32 +416,27 @@ window.LocationHelper = (function() {
             }
         }
 
-        // ================================================================
-        // ★★★ 步骤2：提取详细地址（不含省市区，也不含区县名） ★★★
-        // ================================================================
+        // 2. 提取详细地址（不含省市区，也不含区县名）
         var sourceAddress = fullAddress || detail || name || '';
 
-        // 构建要移除的前缀（省+市+区）
         var prefixParts = [];
         if (province) prefixParts.push(province);
         if (city && city !== province) prefixParts.push(city);
         if (district && district !== city) prefixParts.push(district);
         var prefix = prefixParts.join('');
 
-        // 先移除省市区前缀
         var cleanedDetail = sourceAddress;
         if (prefix && cleanedDetail.indexOf(prefix) === 0) {
             cleanedDetail = cleanedDetail.substring(prefix.length).trim();
             cleanedDetail = cleanedDetail.replace(/^[-,，、\s]+/, '');
         }
 
-        // ★★★ 如果清理后开头仍是区县名，则再次移除（解决区县重复） ★★★
+        // 如果清理后开头仍是区县名，再次移除
         if (district && cleanedDetail.indexOf(district) === 0) {
             cleanedDetail = cleanedDetail.substring(district.length).trim();
             cleanedDetail = cleanedDetail.replace(/^[-,，、\s]+/, '');
         }
 
-        // 如果清理后为空或太短，尝试使用 street + number
         if (!cleanedDetail || cleanedDetail.length < 2) {
             var streetParts = [];
             if (street) streetParts.push(street);
@@ -536,16 +444,13 @@ window.LocationHelper = (function() {
             cleanedDetail = streetParts.join('') || sourceAddress;
         }
 
-        // 如果还是空，使用 name
         if (!cleanedDetail || cleanedDetail.length < 2) {
             cleanedDetail = name || sourceAddress;
         }
 
         console.log('📝 详细地址（不含省市区）:', cleanedDetail);
 
-        // ================================================================
-        // ★★★ 步骤3：填充详细地址到输入框 ★★★
-        // ================================================================
+        // 3. 填充详细地址到输入框
         var addrInput = document.getElementById(addressInputId);
         if (addrInput) {
             addrInput.value = cleanedDetail;
@@ -561,9 +466,7 @@ window.LocationHelper = (function() {
             console.error('❌ 未找到输入框 #' + addressInputId);
         }
 
-        // ================================================================
-        // ★★★ 步骤4：获取完整地址（省市区 + 详细地址拼接） ★★★
-        // ================================================================
+        // 4. 获取完整地址（省市区+详细地址）
         var fullAddressResult = '';
         var parts2 = [];
         if (province) parts2.push(province);
@@ -574,9 +477,7 @@ window.LocationHelper = (function() {
 
         console.log('📝 完整地址（省市区+详细地址）:', fullAddressResult);
 
-        // ================================================================
-        // ★★★ 步骤5：执行回调 ★★★
-        // ================================================================
+        // 5. 执行回调
         if (typeof onAddressPicked === 'function') {
             try {
                 onAddressPicked({
@@ -595,16 +496,13 @@ window.LocationHelper = (function() {
             }
         }
 
-        // ================================================================
-        // ★★★ 步骤6：关闭弹窗 ★★★
-        // ================================================================
+        // 6. 关闭弹窗
         var overlay = document.getElementById('pddAddressModal');
         if (overlay) overlay.remove();
 
         if (Utils && Utils.toast) Utils.toast('✅ 已选择地址');
     }
 
-    // 暴露公共API
     return {
         pickAddress: pickAddress,
         _selectAddress: _selectAddress,

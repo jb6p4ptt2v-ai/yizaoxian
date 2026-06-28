@@ -14,6 +14,7 @@ window.ClientPages = {
     _maxImages: 6,
     _currentReviewPage: 1,
     _currentReviews: [],
+    _isSubmittingReview: false,
 
     // ================================================================
     // 初始化
@@ -290,19 +291,12 @@ window.ClientPages = {
                     if ((p.stock || 0) <= 0) {
                         invalidItems.push({ key: key, name: p.name || '已失效商品', qty: cart[key] });
                     } else {
-                        var specName = '';
-                        if (specId) {
-                            DataService.getProductSpecs(productId).then(function(specs) {
-                                var spec = specs.find(function(s) { return s.id === specId; });
-                                if (spec) specName = ' (' + spec.spec_name + ')';
-                            });
-                        }
                         items.push({
                             key: key,
                             id: productId,
                             specId: specId,
                             name: p.name || '未命名',
-                            specName: specName,
+                            specName: '',
                             price: p.price || 0,
                             qty: cart[key],
                             emoji: p.emoji || '🍅',
@@ -426,7 +420,6 @@ window.ClientPages = {
                 if (!addr) return;
                 var tagDisplay = addr.tag ? ' [' + addr.tag + ']' : '';
                 var lastUsedDisplay = addr.last_used ? ' <span style="font-size:11px;color:var(--text-secondary);">上次使用</span>' : '';
-                // 拼接完整地址用于显示
                 var parts = [];
                 if (addr.province) parts.push(addr.province);
                 if (addr.city && addr.city !== addr.province) parts.push(addr.city);
@@ -504,7 +497,6 @@ window.ClientPages = {
 
                 if (!stockOk || !items.length) return;
 
-                // 拼接完整地址
                 var parts = [];
                 if (addr.province) parts.push(addr.province);
                 if (addr.city && addr.city !== addr.province) parts.push(addr.city);
@@ -516,7 +508,7 @@ window.ClientPages = {
                     id: addr.id,
                     name: addr.name || '',
                     phone: addr.phone || '',
-                    address: addr.address || '', // 只存详细地址
+                    address: addr.address || '',
                     fullAddress: fullAddress,
                     tag: addr.tag || '',
                     lng: addr.lng || null,
@@ -782,7 +774,7 @@ window.ClientPages = {
     },
 
     // ================================================================
-    // 评价模块（含 Worker 代理上传）
+    // 评价模块（含 Worker 代理上传，修复重复提交）
     // ================================================================
     showReviewForm: function(orderId) {
         var user = Auth.getCurrentUser();
@@ -791,15 +783,24 @@ window.ClientPages = {
             return;
         }
 
-        var self = this;
-        this._uploadedImages = [];
-        this._selectedSpec = {};
-
         DataService.getOrderDetail(orderId).then(function(order) {
-            if (!order || !order.items || order.items.length === 0) {
+            if (!order) {
+                Utils.toast('订单不存在');
+                return;
+            }
+            if (order.hasReview) {
+                Utils.toast('您已经评价过该订单');
+                return;
+            }
+            if (!order.items || order.items.length === 0) {
                 Utils.toast('订单无商品可评价');
                 return;
             }
+
+            var self = window.ClientPages;
+            self._uploadedImages = [];
+            self._selectedSpec = {};
+            self._isSubmittingReview = false;
 
             var product = order.items[0];
 
@@ -844,7 +845,7 @@ window.ClientPages = {
 
             html += '<div class="form-actions">';
             html += '<button class="btn-cancel" onclick="window.closeModal()">取消</button>';
-            html += '<button class="btn-submit" onclick="ClientPages._submitReview(\'' + orderId + '\',\'' + product.productId + '\')">提交评价</button>';
+            html += '<button class="btn-submit" id="submitReviewBtn" onclick="ClientPages._submitReview(\'' + orderId + '\',\'' + product.productId + '\')">提交评价</button>';
             html += '</div>';
 
             var content = document.getElementById('modalContent');
@@ -955,6 +956,11 @@ window.ClientPages = {
     },
 
     _submitReview: function(orderId, productId) {
+        if (this._isSubmittingReview) {
+            Utils.toast('正在提交，请勿重复点击');
+            return;
+        }
+
         var user = Auth.getCurrentUser();
         if (!user) {
             Utils.toast('请先登录');
@@ -974,6 +980,13 @@ window.ClientPages = {
         });
 
         var self = this;
+        var submitBtn = document.getElementById('submitReviewBtn');
+        if (submitBtn) {
+            submitBtn.disabled = true;
+            submitBtn.textContent = '提交中...';
+        }
+        self._isSubmittingReview = true;
+
         Utils.toast('⏳ 上传图片...');
 
         this._uploadReviewImages(user.id).then(function(imageUrls) {
@@ -986,9 +999,21 @@ window.ClientPages = {
                 })
                 .catch(function(err) {
                     Utils.toast('评价提交失败: ' + err.message);
+                })
+                .finally(function() {
+                    self._isSubmittingReview = false;
+                    if (submitBtn) {
+                        submitBtn.disabled = false;
+                        submitBtn.textContent = '提交评价';
+                    }
                 });
         }).catch(function(err) {
             Utils.toast('图片上传失败: ' + err.message);
+            self._isSubmittingReview = false;
+            if (submitBtn) {
+                submitBtn.disabled = false;
+                submitBtn.textContent = '提交评价';
+            }
         });
     },
 
@@ -1058,7 +1083,6 @@ window.ClientPages = {
 
         var html = '<div class="modal-title">' + (product.emoji || '🍅') + ' ' + product.name + '</div>';
 
-        // 图片轮播
         if (images.length > 0) {
             html += '<div style="position:relative;overflow:hidden;border-radius:8px;margin-bottom:8px;">';
             html += '<div id="productImageCarousel" style="display:flex;overflow-x:auto;scroll-snap-type:x mandatory;gap:4px;padding:4px 0;">';
@@ -1078,7 +1102,6 @@ window.ClientPages = {
             html += '<div style="text-align:center;font-size:56px;padding:8px 0;">' + (product.emoji || '🍅') + '</div>';
         }
 
-        // 基本信息
         html += '<div style="display:flex;justify-content:space-between;padding:4px 0;"><span>价格</span><span style="font-weight:600;color:#ff3b30;">' + Utils.formatPrice(product.price) + '/' + (product.unit || '份') + '</span></div>';
         html += '<div style="display:flex;justify-content:space-between;padding:4px 0;"><span>库存</span><span>' + stockText + '</span></div>';
         html += '<div style="display:flex;justify-content:space-between;padding:4px 0;"><span>分类</span><span>' + (product.category || '未分类') + '</span></div>';
@@ -1091,12 +1114,10 @@ window.ClientPages = {
             html += '<div style="padding:4px 0;color:var(--text-secondary);">📑 ' + product.description + '</div>';
         }
 
-        // 好评率
         if (reviewCount > 0) {
             html += '<div style="padding:4px 0;border-top:1px solid #f0f0f0;margin-top:4px;">⭐ 好评率' + (avgRating * 20).toFixed(0) + '%（' + reviewCount + '条评价）</div>';
         }
 
-        // 规格选择
         if (specs && specs.length > 0) {
             html += '<div style="margin:8px 0;padding:8px;background:#f8f9fa;border-radius:6px;">';
             html += '<div style="font-size:13px;font-weight:500;margin-bottom:4px;">选择规格</div>';
@@ -1126,7 +1147,6 @@ window.ClientPages = {
             html += '<div style="padding:4px 0;color:var(--primary);">🛒 已选' + inCart + ' 份</div>';
         }
 
-        // 评价预览 + 查看全部
         html += '<div id="productReviewsPreview" style="margin-top:8px;border-top:1px solid #f0f0f0;padding-top:8px;max-height:200px;overflow-y:auto;">';
         html += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">';
         html += '<span style="font-size:13px;font-weight:500;">用户评价</span>';
@@ -1137,7 +1157,6 @@ window.ClientPages = {
         html += '<div id="reviewListContainer"><div style="font-size:12px;color:#999;">加载中...</div></div>';
         html += '</div>';
 
-        // 收藏 + 购物车按钮
         html += '<div class="form-actions" style="margin-top:12px;">';
         html += '<button class="btn-cancel" onclick="window.closeModal()">关闭</button>';
         html += '<button style="flex:1;padding:10px;border-radius:10px;font-weight:600;background:transparent;color:#ff6b00;border:1px solid #ff6b00;cursor:pointer;" onclick="ClientPages.toggleFavorite(\'' + product.id + '\', this)">' + (isFavorited ? '❤️ 已收藏' : '🤍 收藏') + '</button>';
@@ -1153,7 +1172,6 @@ window.ClientPages = {
         var overlay = document.getElementById('modalOverlay');
         if (overlay) overlay.classList.add('active');
 
-        // 加载评价
         DataService.getProductReviews(product.id, 'latest', null, 1, 5).then(function(result) {
             self._currentReviews = result.reviews || [];
             var container = document.getElementById('reviewListContainer');
@@ -1550,7 +1568,7 @@ window.ClientPages = {
     },
 
     // ================================================================
-    // 地址管理（核心修复：地址存储与显示分离）
+    // 地址管理（修复回填可靠性）
     // ================================================================
     showAddressManager: function() {
         var user = Auth.getCurrentUser();
@@ -1590,7 +1608,6 @@ window.ClientPages = {
                 var defaultBadge = addr.is_default ? ' <span class="address-default-badge">默认</span>' : '';
                 var lastUsedBadge = addr.last_used ? ' <span class="address-lastused">上次使用</span>' : '';
 
-                // ★★★ 核心修复：直接拼接省市区+详细地址，不再判断是否重复 ★★★
                 var parts = [];
                 if (addr.province) parts.push(addr.province);
                 if (addr.city && addr.city !== addr.province) parts.push(addr.city);
@@ -1790,7 +1807,7 @@ window.ClientPages = {
 
             var lng = addr && addr.lng ? addr.lng : '';
             var lat = addr && addr.lat ? addr.lat : '';
-            var addressValue = addr ? addr.address : ''; // 详细地址，不包含省市区
+            var addressValue = addr ? addr.address : '';
 
             var html = '<div class="address-page-header">' +
                 '<button class="address-page-back" onclick="ClientPages._hideAddressForm()">‹ 返回</button>' +
@@ -1825,6 +1842,12 @@ window.ClientPages = {
             this._selectedTag = selectedTag;
             if (window.RegionData) {
                 window.RegionData.bindEvents();
+                // 强化回填
+                if (province) {
+                    setTimeout(function() {
+                        window.RegionData.setSelected(province, city, district);
+                    }, 100);
+                }
             }
         }.bind(this));
     },
@@ -1851,22 +1874,19 @@ window.ClientPages = {
     },
 
     saveAddress: function() {
-        console.log('📦 保存按钮被点击');
-
         var nameInput = document.getElementById('addr_name');
         var phoneInput = document.getElementById('addr_phone');
         var addressInput = document.getElementById('addr_address');
         var defaultCheck = document.getElementById('addr_default');
 
         if (!nameInput || !phoneInput || !addressInput || !defaultCheck) {
-            console.error('❌ 表单元素缺失');
             Utils.toast('❌ 页面错误，请刷新后重试');
             return;
         }
 
         var name = nameInput.value.trim();
         var phone = phoneInput.value.trim();
-        var address = addressInput.value.trim(); // 只存详细地址
+        var address = addressInput.value.trim();
         var isDefault = defaultCheck.checked;
         var tag = this._selectedTag || '';
 
@@ -1914,12 +1934,11 @@ window.ClientPages = {
             return;
         }
 
-        // ★★★ 核心修复：address 字段只存详细地址，不包含省市区 ★★★
         var finalData = {
             id: this.editingAddressId || undefined,
             name: name,
             phone: phone,
-            address: address, // 只存详细地址
+            address: address,
             tag: tag,
             lng: lng,
             lat: lat,
@@ -1931,18 +1950,14 @@ window.ClientPages = {
             lastUsed: false
         };
 
-        console.log('📛 执行保存（详细地址仅存 address）:', finalData);
-
         DataService.saveAddress(user.id, finalData)
             .then(function(response) {
-                console.log('✅ 保存成功:', response);
                 Utils.toast('✅ 地址已保存');
                 window.ClientPages.addressPageMode = 'list';
                 window.ClientPages.editingAddressId = null;
                 window.ClientPages.showAddressManager();
             })
             .catch(function(err) {
-                console.error('❌ 保存失败:', err);
                 Utils.toast('❌ 保存失败: ' + (err.message || '未知错误'));
             });
     },

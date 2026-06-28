@@ -99,7 +99,7 @@ window.AdminPages = {
     },
 
     // ================================================================
-    // 供应商管理（修复：地址存储与显示分离）
+    // 供应商管理（地址存储分离，显示拼接）
     // ================================================================
     renderSuppliers: function() {
         var el = document.getElementById('admin-suppliers');
@@ -120,7 +120,6 @@ window.AdminPages = {
                 html += '<table class="admin-table"><thead><tr><th>名称</th><th>联系人</th><th>电话</th><th>地址</th><th>操作</th></tr></thead><tbody>';
                 list.forEach(function(s) {
                     if (!s) return;
-                    // ★★★ 修复：拼接显示完整地址，省市区+详细地址 ★★★
                     var parts = [];
                     if (s.province) parts.push(s.province);
                     if (s.city && s.city !== s.province) parts.push(s.city);
@@ -155,7 +154,7 @@ window.AdminPages = {
             var province = data && data.province ? data.province : '';
             var city = data && data.city ? data.city : '';
             var district = data && data.district ? data.district : '';
-            var address = data ? data.address : ''; // 详细地址（不含省市区）
+            var address = data ? data.address : '';
 
             var regionHtml = '';
             if (window.RegionData) {
@@ -182,7 +181,9 @@ window.AdminPages = {
             if (window.RegionData) {
                 window.RegionData.bindEvents();
                 if (province) {
-                    window.RegionData.setSelected(province, city, district);
+                    setTimeout(function() {
+                        window.RegionData.setSelected(province, city, district);
+                    }, 100);
                 }
             }
         });
@@ -209,7 +210,7 @@ window.AdminPages = {
         if (!name) { Utils.toast('请输入供应商名称'); return; }
         var contact = contactInput.value.trim();
         var phone = phoneInput.value.trim();
-        var address = addressInput.value.trim(); // 只存详细地址
+        var address = addressInput.value.trim();
 
         var addrInput = document.getElementById('f_sup_address');
         var lng = addrInput ? parseFloat(addrInput.dataset.lng) || null : null;
@@ -226,7 +227,6 @@ window.AdminPages = {
             }
         }
 
-        // ★★★ 修复：address 只存详细地址，不拼接省市区 ★★★
         var data = {
             name: name,
             contact: contact,
@@ -260,7 +260,7 @@ window.AdminPages = {
     },
 
     // ================================================================
-    // 商品管理（修复：图片上传改用 Worker 代理）
+    // 商品管理（图片上传改用 Worker 代理，同步后刷新区域数据）
     // ================================================================
     renderProducts: function() {
         var el = document.getElementById('admin-products');
@@ -304,7 +304,6 @@ window.AdminPages = {
             el.innerHTML = '<div class="admin-card"><div class="card-title">商品管理</div><p>加载失败: ' + err.message + '</p></div>';
         });
     },
-
     openProductModal: function(id) {
         if (!this._hasPermission('products')) {
             Utils.toast('您没有权限操作商品');
@@ -320,7 +319,6 @@ window.AdminPages = {
             var isEdit = !!data;
             var html = '<div class="modal-title">' + (isEdit ? '编辑商品' : '添加商品') + '</div>';
 
-            // 基本信息
             html += '<div style="border-bottom:2px solid var(--primary);padding-bottom:8px;margin-bottom:12px;font-weight:500;">📦 基本信息</div>';
 
             html += '<div class="form-group"><label>商品名称 *</label><input id="f_prod_name" value="' + (data ? data.name : '') + '" placeholder="如：有机小白菜"></div>';
@@ -355,7 +353,7 @@ window.AdminPages = {
 
             html += '<div class="form-group"><label>今日可提</label><input type="checkbox" id="f_prod_today" ' + (data && data.today_pickup !== 0 ? 'checked' : '') + '> ✅ 今日可提</div>';
 
-            // ★★★ 图片管理（使用 Worker 代理上传）★★★
+            // 图片管理（使用 Worker 代理上传）
             html += '<div style="border-bottom:2px solid var(--primary);padding-bottom:8px;margin:16px 0 12px;font-weight:500;">🖼️ 商品图片（最多6张）</div>';
             html += '<div id="productImageList" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px;">';
             if (data && data.images) {
@@ -378,7 +376,6 @@ window.AdminPages = {
             }
             html += '</div>';
 
-            // 上传区
             html += '<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">' +
                 '<label style="background:var(--primary);color:#fff;padding:4px 16px;border-radius:6px;cursor:pointer;font-size:12px;">📲 上传图片<input type="file" id="productImageInput" accept="image/*" multiple style="display:none;" onchange="AdminPages._handleProductImages(event, \'' + (data ? data.id : '') + '\')"></label>' +
                 '<span style="font-size:11px;color:#999;">支持多张，每张不超过5MB，上传后自动保存</span>' +
@@ -408,7 +405,6 @@ window.AdminPages = {
             var overlay = document.getElementById('modalOverlay');
             if (overlay) overlay.classList.add('active');
 
-            // 加载供应商列表
             DataService.getSuppliers().then(function(suppliers) {
                 var sel = document.getElementById('f_prod_supplier');
                 if (!sel) return;
@@ -424,7 +420,6 @@ window.AdminPages = {
                 });
             });
 
-            // 加载规格列表
             if (id) {
                 DataService.getProductSpecs(id).then(function(specs) {
                     self._renderSpecList(specs, id);
@@ -492,7 +487,7 @@ window.AdminPages = {
             });
     },
 
-    // ★★★ 核心修复：使用 Worker 代理上传图片（直接调用 DataService.uploadReviewImageViaWorker）★★★
+    // 图片上传（Worker 代理）
     _handleProductImages: function(event, productId) {
         var files = event.target.files;
         if (!files || files.length === 0) return;
@@ -502,8 +497,6 @@ window.AdminPages = {
         Utils.toast('⏳ 正在上传图片...');
 
         var uploadPromises = [];
-        var uploadedUrls = [];
-
         for (var i = 0; i < files.length; i++) {
             var file = files[i];
             if (!file.type.startsWith('image/')) {
@@ -514,8 +507,6 @@ window.AdminPages = {
                 Utils.toast('图片不能超过5MB');
                 continue;
             }
-
-            // ★★★ 直接调用 Worker 代理上传 ★★★
             var promise = DataService.uploadReviewImageViaWorker(userId, file)
                 .then(function(result) {
                     if (result.success) {
@@ -527,7 +518,6 @@ window.AdminPages = {
                     console.warn('图片上传失败:', err);
                     return null;
                 });
-
             uploadPromises.push(promise);
         }
 
@@ -538,7 +528,6 @@ window.AdminPages = {
                 return;
             }
 
-            // 获取当前商品已有图片
             DataService.getProducts().then(function(products) {
                 var product = products.find(function(p) { return p.id === productId; });
                 var existingImages = [];
@@ -550,13 +539,11 @@ window.AdminPages = {
                 }
 
                 var allImages = existingImages.concat(validUrls);
-                // 限制最多6张
                 if (allImages.length > 6) {
                     allImages = allImages.slice(0, 6);
                     Utils.toast('最多保留6张图片，已自动裁剪');
                 }
 
-                // 更新商品图片
                 var productData = {
                     id: productId,
                     images: JSON.stringify(allImages)
@@ -611,7 +598,6 @@ window.AdminPages = {
         if (!name) { Utils.toast('请输入商品名称'); return; }
         if (isNaN(price) || price < 0) { Utils.toast('请输入有效的价格'); return; }
 
-        // 保留现有图片
         var existingImages = '[]';
         if (id) {
             DataService.getProducts().then(function(products) {
@@ -1199,6 +1185,10 @@ window.AdminPages = {
                 if (result.success) {
                     resultEl.innerHTML = '✅ 同步完成！新增' + result.inserted + ' 条，跳过 ' + result.skipped + ' 条';
                     Utils.toast('✅ 地区数据同步成功');
+                    // 刷新 RegionData
+                    if (window.RegionData && window.RegionData.reloadData) {
+                        window.RegionData.reloadData();
+                    }
                 } else {
                     resultEl.innerHTML = '❌ 同步失败: ' + (result.error || '未知错误');
                     Utils.toast('同步失败: ' + (result.error || '未知错误'));

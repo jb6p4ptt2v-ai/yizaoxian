@@ -8,6 +8,14 @@ window.ClientApp = {
         this.currentUser = user;
         var isLoggedIn = !!user;
 
+        // 全局错误捕获
+        window.addEventListener('unhandledrejection', function(event) {
+            console.warn('未捕获的 Promise 错误:', event.reason);
+            var msg = event.reason && event.reason.message ? event.reason.message : '系统异常，请刷新重试';
+            Utils.toast('⚠️ ' + msg);
+            event.preventDefault();
+        });
+
         document.getElementById('authApp').style.display = 'none';
         document.getElementById('clientApp').style.display = 'block';
 
@@ -175,5 +183,11 @@ document.addEventListener('DOMContentLoaded', function() {
                 if (typeof cb === 'function') cb();
             }, 500);
         }
+        // 登录后刷新消息未读
+        setTimeout(function() {
+            if (ClientApp && ClientApp.updateMessageBadge) {
+                ClientApp.updateMessageBadge();
+            }
+        }, 600);
     };
 });
