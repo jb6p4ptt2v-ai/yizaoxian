@@ -1,6 +1,6 @@
 /**
  * 数据服务层 - 调用 Cloudflare Workers API
- * 完整版 v5.5 - 使用 Worker 代理上传图片
+ * 完整版 v5.6 - 清理废弃上传方法
  */
 window.DataService = {
     _getApiBase: function() {
@@ -209,10 +209,10 @@ window.DataService = {
     },
 
     // ================================================================
-    // ★★★ 评价模块（使用 Worker 代理上传图片） ★★★
+    // 评价模块（使用 Worker 代理上传图片）
     // ================================================================
 
-    // 通过 Worker 代理上传图片（绕过 R2 CORS）
+    // 通过 Worker 代理上传图片（绕开 R2 CORS）
     uploadReviewImageViaWorker: function(userId, file) {
         var formData = new FormData();
         formData.append('image', file);
@@ -222,7 +222,6 @@ window.DataService = {
         return fetch(url, {
             method: 'POST',
             body: formData
-            // 不要设置 Content-Type，让浏览器自动设置 multipart/form-data boundary
         }).then(function(res) {
             if (!res.ok) {
                 return res.json().then(function(data) {

@@ -64,7 +64,7 @@ window.ClientPages = {
             self._hotProducts = list.filter(function(p) { return p.is_hot; });
 
             if (!list.length) {
-                grid.innerHTML = '<div class="empty-state" style="grid-column:1/-1;"><div class="empty-icon">🌿</div><p>暂无商品</p></div>';
+                grid.innerHTML = '<div class="empty-state" style="grid-column:1/-1;"><div class="empty-icon">🥬</div><p>暂无商品</p></div>';
                 return;
             }
 
@@ -73,10 +73,10 @@ window.ClientPages = {
 
             var hotHtml = '';
             if (self._hotProducts.length > 0) {
-                hotHtml = '<div class="hot-banner"><div class="hot-title">🔥 热卖榜单</div><div class="hot-list">';
+                hotHtml = '<div class="hot-banner"><div class="hot-title">🔥 热卖榜</div><div class="hot-list">';
                 self._hotProducts.slice(0, 8).forEach(function(p) {
                     hotHtml += '<div class="hot-item" onclick="ClientPages.showProductDetail(\'' + p.id + '\')">' +
-                        '<span class="hot-emoji">' + (p.emoji || '🥬') + '</span>' +
+                        '<span class="hot-emoji">' + (p.emoji || '🍅') + '</span>' +
                         '<span class="hot-name">' + p.name + '</span>' +
                         '<span class="hot-price">' + Utils.formatPrice(p.price) + '</span>' +
                         '</div>';
@@ -91,13 +91,13 @@ window.ClientPages = {
                 var stockText = '';
                 var todayPickupText = p.today_pickup ? ' <span class="today-pickup-tag">今日可提</span>' : '';
                 var hotTag = p.is_hot ? ' <span class="hot-tag">🔥</span>' : '';
-                var soldText = p.sales_count > 0 ? ' <span class="sold-tag">已售 ' + p.sales_count + ' 件</span>' : '';
+                var soldText = p.sales_count > 0 ? ' <span class="sold-tag">已售 ' + p.sales_count + ' 份</span>' : '';
                 if (stock <= 0) { stockClass = 'out'; stockText = '已售罄'; }
                 else if (stock < 10) { stockClass = 'low'; stockText = '仅剩' + stock; }
                 else { stockText = '库存 ' + stock; }
 
                 return '<div class="product-card" onclick="ClientPages.showProductDetail(\'' + p.id + '\')">' +
-                    '<div class="product-img">' + (p.emoji || '🥬') + hotTag + '</div>' +
+                    '<div class="product-img">' + (p.emoji || '🍅') + hotTag + '</div>' +
                     '<div class="product-info">' +
                     '<div class="product-name">' + (p.name || '未命名') + todayPickupText + '</div>' +
                     '<div class="product-unit">' + (p.unit || '份') + soldText + '</div>' +
@@ -107,11 +107,11 @@ window.ClientPages = {
                     '<span class="price-unit">/' + (p.unit || '份') + '</span>' +
                     '</div>' +
                     '<button class="add-cart-btn" onclick="event.stopPropagation();ClientPages.addToCart(\'' + p.id + '\')" ' + (stock <= 0 ? 'disabled' : '') + '>' +
-                    (stock <= 0 ? '×' : '+') +
+                    (stock <= 0 ? '✕' : '+') +
                     '</button>' +
                     '</div>' +
                     '<span class="stock-tag ' + stockClass + '">' + stockText + '</span>' +
-                    (inCart > 0 ? '<span class="selected-tag">已选 ' + inCart + ' 份</span>' : '') +
+                    (inCart > 0 ? '<span class="selected-tag">已选' + inCart + ' 份</span>' : '') +
                     '</div></div>';
             }).join('');
         }).catch(function(err) {
@@ -211,7 +211,7 @@ window.ClientPages = {
                     DataService.saveCart(cart);
                     if (window.ClientApp) window.ClientApp.updateBadges();
                     window.ClientPages.renderProducts();
-                    Utils.toast('已添加 ' + (product.name || '商品') + ' (' + spec.spec_name + ')');
+                    Utils.toast('已添加' + (product.name || '商品') + ' (' + spec.spec_name + ')');
                 }).catch(function() {
                     self._addToCartSimple(productId);
                 });
@@ -241,7 +241,7 @@ window.ClientPages = {
             DataService.saveCart(cart);
             if (window.ClientApp) window.ClientApp.updateBadges();
             window.ClientPages.renderProducts();
-            Utils.toast('已添加 ' + (product.name || '商品'));
+            Utils.toast('已添加' + (product.name || '商品'));
         });
     },
 
@@ -305,7 +305,7 @@ window.ClientPages = {
                             specName: specName,
                             price: p.price || 0,
                             qty: cart[key],
-                            emoji: p.emoji || '🥬',
+                            emoji: p.emoji || '🍅',
                             stock: p.stock || 0
                         });
                         total += p.price * cart[key];
@@ -333,7 +333,7 @@ window.ClientPages = {
                 html += '<div style="font-size:12px;color:#ff3b30;font-weight:500;margin-bottom:4px;">⚠️ 以下商品已失效，请移除</div>';
                 invalidItems.forEach(function(item) {
                     html += '<div style="display:flex;justify-content:space-between;align-items:center;padding:4px 0;font-size:13px;">' +
-                        '<span style="color:#999;">' + item.name + ' × ' + item.qty + '</span>' +
+                        '<span style="color:#999;">' + item.name + ' ✕ ' + item.qty + '</span>' +
                         '<button onclick="ClientPages.removeFromCart(\'' + item.key + '\')" style="color:#ff3b30;background:none;border:none;font-size:12px;cursor:pointer;">移除</button>' +
                         '</div>';
                 });
@@ -426,7 +426,13 @@ window.ClientPages = {
                 if (!addr) return;
                 var tagDisplay = addr.tag ? ' [' + addr.tag + ']' : '';
                 var lastUsedDisplay = addr.last_used ? ' <span style="font-size:11px;color:var(--text-secondary);">上次使用</span>' : '';
-                var fullDisplayAddress = addr.fullAddress || addr.address || '';
+                // 拼接完整地址用于显示
+                var parts = [];
+                if (addr.province) parts.push(addr.province);
+                if (addr.city && addr.city !== addr.province) parts.push(addr.city);
+                if (addr.district && addr.district !== addr.city) parts.push(addr.district);
+                if (addr.address) parts.push(addr.address);
+                var fullDisplayAddress = parts.join('');
                 html += '<div style="padding:10px;border:1px solid var(--border);border-radius:8px;margin-bottom:8px;display:flex;justify-content:space-between;align-items:center;">' +
                     '<div><div><strong>' + (addr.name || '') + '</strong> ' + (addr.phone || '') + tagDisplay + (addr.is_default ? ' <span style="color:var(--primary);font-size:12px;">默认</span>' : '') + lastUsedDisplay + '</div>' +
                     '<div style="font-size:13px;color:var(--text-secondary);">' + fullDisplayAddress + '</div></div>' +
@@ -498,19 +504,19 @@ window.ClientPages = {
 
                 if (!stockOk || !items.length) return;
 
-                var fullAddress = '';
-                var parts2 = [];
-                if (addr.province) parts2.push(addr.province);
-                if (addr.city && addr.city !== addr.province) parts2.push(addr.city);
-                if (addr.district && addr.district !== addr.city) parts2.push(addr.district);
-                if (addr.address) parts2.push(addr.address);
-                fullAddress = parts2.join('');
+                // 拼接完整地址
+                var parts = [];
+                if (addr.province) parts.push(addr.province);
+                if (addr.city && addr.city !== addr.province) parts.push(addr.city);
+                if (addr.district && addr.district !== addr.city) parts.push(addr.district);
+                if (addr.address) parts.push(addr.address);
+                var fullAddress = parts.join('');
 
                 var updateData = {
                     id: addr.id,
                     name: addr.name || '',
                     phone: addr.phone || '',
-                    address: addr.address || '',
+                    address: addr.address || '', // 只存详细地址
                     fullAddress: fullAddress,
                     tag: addr.tag || '',
                     lng: addr.lng || null,
@@ -554,7 +560,7 @@ window.ClientPages = {
                         PaymentHelper.pay({
                             orderId: orderId,
                             total: total,
-                            subject: '宜早鲜订单 #' + orderId
+                            subject: '宜早鲜订单#' + orderId
                         }, function(payResult) {
                             if (payResult.success) {
                                 Utils.toast('🎉 支付成功！提货码：' + builtOrder.pickupCode);
@@ -614,11 +620,11 @@ window.ClientPages = {
                 if (Array.isArray(o.items)) {
                     itemsHtml = o.items.map(function(i) {
                         var specText = i.specId ? ' (' + i.specName + ')' : '';
-                        return (i.name || '') + specText + ' × ' + (i.quantity || 0);
+                        return (i.name || '') + specText + ' ✕ ' + (i.quantity || 0);
                     }).join('、');
                 }
                 var pickupInfo = o.pickup_code ? ' 🎫 提货码：<strong>' + o.pickup_code + '</strong>' : '';
-                var pickupDate = o.expected_pickup_date ? ' · 📅 ' + o.expected_pickup_date + ' 可提货' : '';
+                var pickupDate = o.expected_pickup_date ? ' · 📮 ' + o.expected_pickup_date + ' 可提货' : '';
                 var statusText = statusMap[o.status] || o.status || '未知';
                 var isCompleted = o.status === 'completed' || o.status === 'picked';
                 var canReview = isCompleted && !o._hasReview;
@@ -627,7 +633,7 @@ window.ClientPages = {
                     '<div class="order-header"><span class="order-id">' + (o.id || '') + pickupInfo + '</span><span class="order-status ' + (statusCls[o.status] || '') + '">' + statusText + '</span></div>' +
                     '<div class="order-items">' + itemsHtml + '</div>' +
                     '<div class="order-total">' + Utils.formatPrice(o.total || 0) + '</div>' +
-                    '<div class="order-address">📍 ' + (o.address || '默认地址') + pickupDate + ' · ' + (o.created_at || '').slice(0, 16) + '</div>' +
+                    '<div class="order-address">📷 ' + (o.address || '默认地址') + pickupDate + ' · ' + (o.created_at || '').slice(0, 16) + '</div>' +
                     '<div style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap;">' +
                     (o.status === 'pending' ? '<button onclick="event.stopPropagation();ClientPages.cancelOrder(\'' + o.id + '\')" style="font-size:12px;color:#ff3b30;background:none;border:1px solid #ff3b30;border-radius:12px;padding:2px 14px;cursor:pointer;">取消订单</button>' : '') +
                     (o.status === 'shipped' ? '<button onclick="event.stopPropagation();ClientPages.confirmOrder(\'' + o.id + '\')" style="font-size:12px;color:var(--primary);background:none;border:1px solid var(--primary);border-radius:12px;padding:2px 14px;cursor:pointer;">确认收货</button>' : '') +
@@ -654,7 +660,7 @@ window.ClientPages = {
                 itemsHtml = order.items.map(function(i) {
                     var specText = i.specId ? ' (' + i.specName + ')' : '';
                     return '<div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid #f5f5f5;font-size:14px;">' +
-                        '<span>' + (i.name || '') + specText + ' × ' + (i.quantity || 0) + '</span>' +
+                        '<span>' + (i.name || '') + specText + ' ✕ ' + (i.quantity || 0) + '</span>' +
                         '<span>' + Utils.formatPrice((i.price || 0) * (i.quantity || 0)) + '</span>' +
                         '</div>';
                 }).join('');
@@ -665,7 +671,7 @@ window.ClientPages = {
                 var logStatus = { pending: '待发货', shipping: '运输中', delivered: '已签收' };
                 var logInfo = order.logistics.logistics_info ? JSON.parse(order.logistics.logistics_info) : [];
                 logisticsHtml = '<div style="margin-top:8px;padding:8px;background:#f8f8f8;border-radius:6px;">' +
-                    '<div style="font-size:13px;font-weight:500;">📦 物流状态：' + (logStatus[order.logistics.status] || order.logistics.status) + '</div>' +
+                    '<div style="font-size:13px;font-weight:500;">📝 物流状态：' + (logStatus[order.logistics.status] || order.logistics.status) + '</div>' +
                     (order.logistics.tracking_number ? '<div style="font-size:12px;color:#666;">运单号：' + order.logistics.tracking_number + '</div>' : '') +
                     (order.logistics.carrier ? '<div style="font-size:12px;color:#666;">承运商：' + order.logistics.carrier + '</div>' : '') +
                     (logInfo.length > 0 ? '<div style="font-size:12px;color:#666;margin-top:4px;">' + logInfo.map(function(l) { return l.time + ' ' + l.status; }).join('<br>') + '</div>' : '') +
@@ -676,12 +682,12 @@ window.ClientPages = {
             if (order.afterSale) {
                 var asStatus = { pending: '审核中', approved: '已通过', rejected: '已拒绝', completed: '已完成' };
                 afterSaleHtml = '<div style="margin-top:8px;padding:8px;background:#fff8e1;border-radius:6px;border:1px solid #ffd54f;">' +
-                    '<div style="font-size:13px;font-weight:500;">🔄 售后状态：' + (asStatus[order.afterSale.status] || order.afterSale.status) + '</div>' +
+                    '<div style="font-size:13px;font-weight:500;">🔧 售后状态：' + (asStatus[order.afterSale.status] || order.afterSale.status) + '</div>' +
                     (order.afterSale.admin_reply ? '<div style="font-size:12px;color:#666;">回复：' + order.afterSale.admin_reply + '</div>' : '') +
                     '</div>';
             }
 
-            var html = '<div class="modal-title">📋 订单详情</div>' +
+            var html = '<div class="modal-title">📵 订单详情</div>' +
                 '<div style="font-size:13px;color:#666;margin-bottom:8px;">订单号：' + order.id + '</div>' +
                 '<div style="font-size:13px;color:var(--primary);margin-bottom:12px;">状态：' + (statusMap[order.status] || order.status) + '</div>' +
                 '<div style="font-size:13px;font-weight:500;margin:8px 0 4px;">商品清单</div>' +
@@ -689,7 +695,7 @@ window.ClientPages = {
                 '<div style="display:flex;justify-content:space-between;font-weight:600;font-size:16px;padding:8px 0;border-top:2px solid var(--border);">' +
                 '<span>合计</span><span style="color:#ff3b30;">' + Utils.formatPrice(order.total || 0) + '</span></div>' +
                 (order.pickup_code ? '<div style="font-size:13px;padding:8px 0;">🎫 提货码：<strong>' + order.pickup_code + '</strong></div>' : '') +
-                (order.expected_pickup_date ? '<div style="font-size:13px;padding:4px 0;">📅 预计提货：' + order.expected_pickup_date + '</div>' : '') +
+                (order.expected_pickup_date ? '<div style="font-size:13px;padding:4px 0;">📮 预计提货：' + order.expected_pickup_date + '</div>' : '') +
                 logisticsHtml +
                 afterSaleHtml +
                 '<div style="font-size:12px;color:#999;margin-top:8px;">下单时间：' + (order.created_at || '').slice(0, 16) + '</div>' +
@@ -776,7 +782,7 @@ window.ClientPages = {
     },
 
     // ================================================================
-    // ★★★ 评价模块（含 Worker 代理上传图片） ★★★
+    // 评价模块（含 Worker 代理上传）
     // ================================================================
     showReviewForm: function(orderId) {
         var user = Auth.getCurrentUser();
@@ -798,7 +804,7 @@ window.ClientPages = {
             var product = order.items[0];
 
             var html = '<div class="modal-title">✍️ 评价商品</div>';
-            html += '<div style="text-align:center;font-size:36px;padding:8px 0;">' + (product.emoji || '🥬') + '</div>';
+            html += '<div style="text-align:center;font-size:36px;padding:8px 0;">' + (product.emoji || '🍅') + '</div>';
             html += '<div style="text-align:center;font-weight:500;">' + product.name + '</div>';
 
             html += '<div style="margin:12px 0;">';
@@ -821,7 +827,7 @@ window.ClientPages = {
             html += '<div style="margin:12px 0;">';
             html += '<label style="display:block;font-size:13px;color:#666;margin-bottom:4px;">上传图片（最多6张）</label>';
             html += '<div id="reviewImagePreview" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px;"></div>';
-            html += '<label for="reviewImageInput" id="uploadBtnLabel" style="display:inline-block;padding:8px 16px;background:var(--primary);color:#fff;border-radius:6px;cursor:pointer;font-size:13px;">📷 选择图片</label>';
+            html += '<label for="reviewImageInput" id="uploadBtnLabel" style="display:inline-block;padding:8px 16px;background:var(--primary);color:#fff;border-radius:6px;cursor:pointer;font-size:13px;">📲 选择图片</label>';
             html += '<input type="file" id="reviewImageInput" accept="image/*" multiple style="display:none;" onchange="ClientPages._handleReviewImages(event)">';
             html += '<span style="font-size:11px;color:#999;margin-left:8px;">支持 JPG/PNG，每张不超过5MB</span>';
             html += '</div>';
@@ -878,7 +884,7 @@ window.ClientPages = {
 
         for (var i = 0; i < files.length; i++) {
             if (self._uploadedImages.length >= self._maxImages) {
-                Utils.toast('最多上传 ' + self._maxImages + ' 张图片');
+                Utils.toast('最多上传' + self._maxImages + ' 张图片');
                 break;
             }
             var file = files[i];
@@ -904,7 +910,7 @@ window.ClientPages = {
                 img.style.cssText = 'width:100%;height:100%;object-fit:cover;';
 
                 var removeBtn = document.createElement('button');
-                removeBtn.textContent = '×';
+                removeBtn.textContent = '✕';
                 removeBtn.style.cssText = 'position:absolute;top:2px;right:2px;width:18px;height:18px;border-radius:50%;border:none;background:#ff3b30;color:#fff;font-size:12px;cursor:pointer;line-height:1;';
                 removeBtn.onclick = function(e) {
                     e.stopPropagation();
@@ -924,7 +930,6 @@ window.ClientPages = {
         event.target.value = '';
     },
 
-    // ★★★ 通过 Worker 代理上传图片 ★★★
     _uploadReviewImages: function(userId) {
         var self = this;
         var uploadPromises = [];
@@ -988,7 +993,7 @@ window.ClientPages = {
     },
 
     // ================================================================
-    // ★★★ 商品详情弹窗（完全对齐拼多多） ★★★
+    // 商品详情弹窗
     // ================================================================
     showProductDetail: function(productId) {
         var self = this;
@@ -1051,7 +1056,7 @@ window.ClientPages = {
             images = JSON.parse(product.images || '[]');
         } catch(e) { images = []; }
 
-        var html = '<div class="modal-title">' + (product.emoji || '🥬') + ' ' + product.name + '</div>';
+        var html = '<div class="modal-title">' + (product.emoji || '🍅') + ' ' + product.name + '</div>';
 
         // 图片轮播
         if (images.length > 0) {
@@ -1070,7 +1075,7 @@ window.ClientPages = {
             html += '</div>';
             html += '</div>';
         } else {
-            html += '<div style="text-align:center;font-size:56px;padding:8px 0;">' + (product.emoji || '🥬') + '</div>';
+            html += '<div style="text-align:center;font-size:56px;padding:8px 0;">' + (product.emoji || '🍅') + '</div>';
         }
 
         // 基本信息
@@ -1080,18 +1085,18 @@ window.ClientPages = {
         if (product.origin) {
             html += '<div style="display:flex;justify-content:space-between;padding:4px 0;"><span>产地</span><span>' + product.origin + '</span></div>';
         }
-        html += '<div style="display:flex;justify-content:space-between;padding:4px 0;"><span>已售</span><span>' + (product.sales_count || 0) + ' 件</span></div>';
+        html += '<div style="display:flex;justify-content:space-between;padding:4px 0;"><span>已售</span><span>' + (product.sales_count || 0) + ' 份</span></div>';
         html += '<div style="display:flex;justify-content:space-between;padding:4px 0;"><span>状态</span><span>' + todayPickupText + hotTag + '</span></div>';
         if (product.description) {
-            html += '<div style="padding:4px 0;color:var(--text-secondary);">📝 ' + product.description + '</div>';
+            html += '<div style="padding:4px 0;color:var(--text-secondary);">📑 ' + product.description + '</div>';
         }
 
-        // ★★★ 好评率 ★★★
+        // 好评率
         if (reviewCount > 0) {
-            html += '<div style="padding:4px 0;border-top:1px solid #f0f0f0;margin-top:4px;">⭐ 好评率 ' + (avgRating * 20).toFixed(0) + '%（' + reviewCount + '条评价）</div>';
+            html += '<div style="padding:4px 0;border-top:1px solid #f0f0f0;margin-top:4px;">⭐ 好评率' + (avgRating * 20).toFixed(0) + '%（' + reviewCount + '条评价）</div>';
         }
 
-        // ★★★ 规格选择 ★★★
+        // 规格选择
         if (specs && specs.length > 0) {
             html += '<div style="margin:8px 0;padding:8px;background:#f8f9fa;border-radius:6px;">';
             html += '<div style="font-size:13px;font-weight:500;margin-bottom:4px;">选择规格</div>';
@@ -1118,15 +1123,15 @@ window.ClientPages = {
         }
 
         if (inCart > 0) {
-            html += '<div style="padding:4px 0;color:var(--primary);">🛒 已选 ' + inCart + ' 份</div>';
+            html += '<div style="padding:4px 0;color:var(--primary);">🛒 已选' + inCart + ' 份</div>';
         }
 
-        // ★★★ 评价预览 + 查看全部（拼多多风格） ★★★
+        // 评价预览 + 查看全部
         html += '<div id="productReviewsPreview" style="margin-top:8px;border-top:1px solid #f0f0f0;padding-top:8px;max-height:200px;overflow-y:auto;">';
         html += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">';
         html += '<span style="font-size:13px;font-weight:500;">用户评价</span>';
         if (reviewCount > 3) {
-            html += '<span onclick="ClientPages._loadMoreReviews(\'' + product.id + '\')" style="font-size:12px;color:var(--primary);cursor:pointer;">查看全部 ›</span>';
+            html += '<span onclick="ClientPages._loadMoreReviews(\'' + product.id + '\')" style="font-size:12px;color:var(--primary);cursor:pointer;">查看全部 →</span>';
         }
         html += '</div>';
         html += '<div id="reviewListContainer"><div style="font-size:12px;color:#999;">加载中...</div></div>';
@@ -1148,7 +1153,7 @@ window.ClientPages = {
         var overlay = document.getElementById('modalOverlay');
         if (overlay) overlay.classList.add('active');
 
-        // ★★★ 加载评价（含图片） ★★★
+        // 加载评价
         DataService.getProductReviews(product.id, 'latest', null, 1, 5).then(function(result) {
             self._currentReviews = result.reviews || [];
             var container = document.getElementById('reviewListContainer');
@@ -1296,18 +1301,18 @@ window.ClientPages = {
             var container = document.getElementById('favoritesList') || document.getElementById('productGrid');
             if (!container) return;
             if (favorites.length === 0) {
-                container.innerHTML = '<div class="empty-state"><div class="empty-icon">❤️</div><p>暂无收藏商品</p></div>';
+                container.innerHTML = '<div class="empty-state"><div class="empty-icon">🤍</div><p>暂无收藏商品</p></div>';
                 return;
             }
             var html = '<div style="display:grid;grid-template-columns:repeat(2,1fr);gap:10px;">';
             favorites.forEach(function(f) {
                 html += '<div class="product-card" onclick="ClientPages.showProductDetail(\'' + f.product_id + '\')">' +
-                    '<div class="product-img">' + (f.emoji || '🥬') + '</div>' +
+                    '<div class="product-img">' + (f.emoji || '🍅') + '</div>' +
                     '<div class="product-info">' +
                     '<div class="product-name">' + f.name + '</div>' +
                     '<div class="product-meta">' +
                     '<div class="product-price">' + Utils.formatPrice(f.price || 0) + '</div>' +
-                    '<span style="font-size:12px;color:#999;">已售 ' + (f.sales_count || 0) + '件</span>' +
+                    '<span style="font-size:12px;color:#999;">已售 ' + (f.sales_count || 0) + '份</span>' +
                     '</div></div></div>';
             });
             html += '</div>';
@@ -1330,7 +1335,7 @@ window.ClientPages = {
                     var claimed = c.user_claimed > 0;
                     html += '<div style="display:flex;justify-content:space-between;align-items:center;padding:8px;border:1px solid #e8ecf0;border-radius:6px;margin-bottom:6px;">' +
                         '<div><div style="font-weight:500;">' + c.name + '</div>' +
-                        '<div style="font-size:12px;color:#666;">' + (c.type === 'discount' ? '折扣 ' + c.value + '折' : '满 ' + c.min_amount + ' 减 ' + c.value) + '</div>' +
+                        '<div style="font-size:12px;color:#666;">' + (c.type === 'discount' ? '折扣 ' + c.value + '折' : '满' + c.min_amount + ' 减' + c.value) + '</div>' +
                         '</div>' +
                         (claimed ? '<span style="color:#999;font-size:12px;">已领取</span>' : '<button onclick="ClientPages.claimCoupon(\'' + c.id + '\')" style="background:var(--primary);color:#fff;border:none;border-radius:16px;padding:4px 16px;font-size:12px;cursor:pointer;">领取</button>') +
                         '</div>';
@@ -1388,9 +1393,9 @@ window.ClientPages = {
                 container.innerHTML = '<div class="empty-state"><div class="empty-icon">📭</div><p>暂无消息</p></div>';
                 return;
             }
-            var html = '<div class="admin-card"><div class="card-title">📬 消息中心 <span style="font-size:12px;color:#999;">共 ' + messages.length + ' 条</span></div>';
+            var html = '<div class="admin-card"><div class="card-title">📤 消息中心 <span style="font-size:12px;color:#999;">共' + messages.length + ' 条</span></div>';
             messages.forEach(function(msg) {
-                var typeMap = { order: '📦 订单', system: '🔔 系统', promotion: '🎉 促销' };
+                var typeMap = { order: '📝 订单', system: '🔔 系统', promotion: '🎉 促销' };
                 html += '<div style="padding:10px 0;border-bottom:1px solid #f5f5f5;' + (msg.is_read ? 'opacity:0.7;' : 'background:#f0faff;') + '" onclick="ClientPages.markMessageRead(\'' + msg.id + '\')">' +
                     '<div style="display:flex;justify-content:space-between;">' +
                     '<span style="font-weight:' + (msg.is_read ? '400' : '600') + ';">' + msg.title + '</span>' +
@@ -1426,7 +1431,7 @@ window.ClientPages = {
             Utils.toast('请先登录');
             return;
         }
-        var html = '<div class="modal-title">🔄 申请售后</div>' +
+        var html = '<div class="modal-title">🔧 申请售后</div>' +
             '<div style="margin:12px 0;">' +
             '<label style="display:block;font-size:13px;color:#666;margin-bottom:4px;">售后类型</label>' +
             '<select id="afterSaleType" style="width:100%;padding:8px;border:1px solid #ddd;border-radius:6px;">' +
@@ -1488,12 +1493,12 @@ window.ClientPages = {
             var container = document.getElementById('afterSalesContainer') || document.getElementById('orderList');
             if (!container) return;
             if (list.length === 0) {
-                container.innerHTML = '<div class="empty-state"><div class="empty-icon">🔄</div><p>暂无售后记录</p></div>';
+                container.innerHTML = '<div class="empty-state"><div class="empty-icon">🔧</div><p>暂无售后记录</p></div>';
                 return;
             }
             var statusMap = { pending: '待审核', approved: '已通过', rejected: '已拒绝', completed: '已完成' };
             var typeMap = { refund: '仅退款', return: '退货退款' };
-            var html = '<div class="admin-card"><div class="card-title">🔄 售后记录</div>';
+            var html = '<div class="admin-card"><div class="card-title">🔧 售后记录</div>';
             list.forEach(function(a) {
                 html += '<div style="padding:8px 0;border-bottom:1px solid #f5f5f5;">' +
                     '<div style="display:flex;justify-content:space-between;">' +
@@ -1545,7 +1550,7 @@ window.ClientPages = {
     },
 
     // ================================================================
-    // 地址管理
+    // 地址管理（核心修复：地址存储与显示分离）
     // ================================================================
     showAddressManager: function() {
         var user = Auth.getCurrentUser();
@@ -1577,7 +1582,7 @@ window.ClientPages = {
             '<div class="address-list-container">';
 
         if (!addresses.length) {
-            html += '<div class="address-empty"><div class="empty-icon">📍</div><p>暂无地址，请添加</p></div>';
+            html += '<div class="address-empty"><div class="empty-icon">📷</div><p>暂无地址，请添加</p></div>';
         } else {
             html += '<div class="address-list">';
             addresses.forEach(function(addr, index) {
@@ -1585,22 +1590,13 @@ window.ClientPages = {
                 var defaultBadge = addr.is_default ? ' <span class="address-default-badge">默认</span>' : '';
                 var lastUsedBadge = addr.last_used ? ' <span class="address-lastused">上次使用</span>' : '';
 
-                var fullAddress = '';
+                // ★★★ 核心修复：直接拼接省市区+详细地址，不再判断是否重复 ★★★
                 var parts = [];
                 if (addr.province) parts.push(addr.province);
                 if (addr.city && addr.city !== addr.province) parts.push(addr.city);
                 if (addr.district && addr.district !== addr.city) parts.push(addr.district);
                 if (addr.address) parts.push(addr.address);
-                var shouldUseFull = false;
-                if (addr.address && addr.province) {
-                    var addrCopy = addr.address;
-                    if (addrCopy.indexOf(addr.province) === 0) {
-                        shouldUseFull = true;
-                    }
-                }
-                fullAddress = shouldUseFull ? addr.address : parts.join('');
-
-                if (!fullAddress && addr.street) fullAddress = addr.street;
+                var fullAddress = parts.join('');
 
                 html += '<div class="address-item-wrapper" data-id="' + addr.id + '">' +
                     '<div class="address-item">' +
@@ -1794,7 +1790,7 @@ window.ClientPages = {
 
             var lng = addr && addr.lng ? addr.lng : '';
             var lat = addr && addr.lat ? addr.lat : '';
-            var addressValue = addr ? addr.address : '';
+            var addressValue = addr ? addr.address : ''; // 详细地址，不包含省市区
 
             var html = '<div class="address-page-header">' +
                 '<button class="address-page-back" onclick="ClientPages._hideAddressForm()">‹ 返回</button>' +
@@ -1806,8 +1802,8 @@ window.ClientPages = {
                 '<div class="form-group"><label>手机号 *</label><input id="addr_phone" value="' + (addr ? addr.phone : '') + '" placeholder="收货人手机号"></div>' +
                 '<div class="form-group"><label>地区 *</label>' + regionHtml + '</div>' +
                 '<div class="form-group"><label>详细地址</label>' +
-                '<input id="addr_address" value="' + addressValue + '" placeholder="如街道、门牌号、小区、乡镇、村等" style="width:100%;padding:8px 12px;border:1px solid #ddd;border-radius:8px;font-size:14px;margin-bottom:4px;">' +
-                '<button class="locate-btn-full" onclick="ClientPages.fillAddressByLocation()" style="width:100%;background:var(--primary);color:#fff;padding:8px 0;border-radius:20px;font-size:13px;border:none;cursor:pointer;margin-top:4px;">📍 定位</button>' +
+                '<input id="addr_address" value="' + addressValue + '" placeholder="街道、门牌号、小区、乡镇、村等（不含省市）" style="width:100%;padding:8px 12px;border:1px solid #ddd;border-radius:8px;font-size:14px;margin-bottom:4px;">' +
+                '<button class="locate-btn-full" onclick="ClientPages.fillAddressByLocation()" style="width:100%;background:var(--primary);color:#fff;padding:8px 0;border-radius:20px;font-size:13px;border:none;cursor:pointer;margin-top:4px;">📷 定位</button>' +
                 '</div>' +
                 '<div class="form-group"><label>地址标签</label>' +
                 '<div class="tag-selector">';
@@ -1854,10 +1850,8 @@ window.ClientPages = {
         });
     },
 
-    _showAddressPicker: function() {},
-
     saveAddress: function() {
-        console.log('💾 保存按钮被点击');
+        console.log('📦 保存按钮被点击');
 
         var nameInput = document.getElementById('addr_name');
         var phoneInput = document.getElementById('addr_phone');
@@ -1872,7 +1866,7 @@ window.ClientPages = {
 
         var name = nameInput.value.trim();
         var phone = phoneInput.value.trim();
-        var address = addressInput.value.trim();
+        var address = addressInput.value.trim(); // 只存详细地址
         var isDefault = defaultCheck.checked;
         var tag = this._selectedTag || '';
 
@@ -1920,18 +1914,12 @@ window.ClientPages = {
             return;
         }
 
-        var fullAddressParts = [];
-        if (province) fullAddressParts.push(province);
-        if (city && city !== province) fullAddressParts.push(city);
-        if (district && district !== city) fullAddressParts.push(district);
-        if (address) fullAddressParts.push(address);
-        var fullAddress = fullAddressParts.join('');
-
+        // ★★★ 核心修复：address 字段只存详细地址，不包含省市区 ★★★
         var finalData = {
             id: this.editingAddressId || undefined,
             name: name,
             phone: phone,
-            address: fullAddress,
+            address: address, // 只存详细地址
             tag: tag,
             lng: lng,
             lat: lat,
@@ -1943,7 +1931,7 @@ window.ClientPages = {
             lastUsed: false
         };
 
-        console.log('📤 执行保存:', finalData);
+        console.log('📛 执行保存（详细地址仅存 address）:', finalData);
 
         DataService.saveAddress(user.id, finalData)
             .then(function(response) {
