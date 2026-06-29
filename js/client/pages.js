@@ -420,7 +420,6 @@ window.ClientPages = {
                 if (!addr) return;
                 var tagDisplay = addr.tag ? ' [' + addr.tag + ']' : '';
                 var lastUsedDisplay = addr.last_used ? ' <span style="font-size:11px;color:var(--text-secondary);">上次使用</span>' : '';
-                // ★★★ 地址拼接使用空格分隔 ★★★
                 var parts = [];
                 if (addr.province) parts.push(addr.province);
                 if (addr.city && addr.city !== addr.province) parts.push(addr.city);
@@ -498,7 +497,6 @@ window.ClientPages = {
 
                 if (!stockOk || !items.length) return;
 
-                // ★★★ 地址拼接空格分隔 ★★★
                 var parts = [];
                 if (addr.province) parts.push(addr.province);
                 if (addr.city && addr.city !== addr.province) parts.push(addr.city);
@@ -1568,7 +1566,6 @@ window.ClientPages = {
             this.loadUnreadCount();
         }.bind(this));
     },
-
     // ================================================================
     // 地址管理（显示空格分隔，定位联动）
     // ================================================================
@@ -1610,7 +1607,6 @@ window.ClientPages = {
                 var defaultBadge = addr.is_default ? ' <span class="address-default-badge">默认</span>' : '';
                 var lastUsedBadge = addr.last_used ? ' <span class="address-lastused">上次使用</span>' : '';
 
-                // ★★★ 地址拼接使用空格分隔 ★★★
                 var parts = [];
                 if (addr.province) parts.push(addr.province);
                 if (addr.city && addr.city !== addr.province) parts.push(addr.city);
@@ -1774,6 +1770,7 @@ window.ClientPages = {
         });
     },
 
+    // ★★★ 修改后的 openAddressForm（含手机号自动填充、排版优化）★★★
     openAddressForm: function(addressId) {
         var user = Auth.getCurrentUser();
         if (!user) {
@@ -1812,6 +1809,9 @@ window.ClientPages = {
             var lat = addr && addr.lat ? addr.lat : '';
             var addressValue = addr ? addr.address : '';
 
+            // ★★★ 自动填充当前用户手机号（仅新增地址时）★★★
+            var phoneValue = (addr && addr.phone) ? addr.phone : (user ? user.phone : '');
+
             var html = '<div class="address-page-header">' +
                 '<button class="address-page-back" onclick="ClientPages._hideAddressForm()">‹ 返回</button>' +
                 '<span class="address-page-title">' + title + '</span>' +
@@ -1819,7 +1819,7 @@ window.ClientPages = {
                 '<div class="address-form-container">' +
                 '<div class="address-form">' +
                 '<div class="form-group"><label>收货人 *</label><input id="addr_name" value="' + (addr ? addr.name : '') + '" placeholder="收货人姓名"></div>' +
-                '<div class="form-group"><label>手机号 *</label><input id="addr_phone" value="' + (addr ? addr.phone : '') + '" placeholder="收货人手机号"></div>' +
+                '<div class="form-group"><label>手机号 *</label><input id="addr_phone" value="' + phoneValue + '" placeholder="收货人手机号"></div>' +
                 '<div class="form-group"><label>地区 *</label>' + regionHtml + '</div>' +
                 '<div class="form-group"><label>详细地址</label>' +
                 '<input id="addr_address" value="' + addressValue + '" placeholder="街道、门牌号、小区、乡镇、村等（不含省市）" style="width:100%;padding:8px 12px;border:1px solid #ddd;border-radius:8px;font-size:14px;margin-bottom:4px;">' +
@@ -1834,9 +1834,10 @@ window.ClientPages = {
             });
 
             html += '</div></div>' +
-                '<div class="form-group" style="display:flex;align-items:center;gap:8px;">' +
-                '<label style="margin:0;">设为默认</label>' +
-                '<input type="checkbox" id="addr_default" ' + (addr && addr.is_default ? 'checked' : '') + '>' +
+                // ★★★ 优化“设为默认”排版 ★★★
+                '<div class="form-group" style="display:flex;align-items:center;gap:12px;padding:6px 0;border-top:1px solid #eee;margin-top:8px;">' +
+                '<label style="margin:0;font-weight:500;font-size:14px;">设为默认地址</label>' +
+                '<input type="checkbox" id="addr_default" ' + (addr && addr.is_default ? 'checked' : '') + ' style="width:20px;height:20px;">' +
                 '</div>' +
                 '<button class="address-save-btn" onclick="ClientPages.saveAddress()">保存</button>' +
                 '</div></div>';
@@ -1845,7 +1846,6 @@ window.ClientPages = {
             this._selectedTag = selectedTag;
             if (window.RegionData) {
                 window.RegionData.bindEvents();
-                // 强化回填
                 if (province) {
                     setTimeout(function() {
                         window.RegionData.setSelected(province, city, district);
