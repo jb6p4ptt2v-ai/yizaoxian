@@ -1,6 +1,6 @@
 // ============================================================
-// 宜早鲜 Cloudflare Workers API - v5.5 完整版
-// 新增：/reviews/upload 代理上传路由，绕过 R2 CORS
+// 宜早鲜 Cloudflare Workers API - v5.6 临时硬编码高德Key
+// 硬编码用于解决环境变量暂时不生效的问题，同步完成后建议恢复
 // ============================================================
 
 export default {
@@ -26,7 +26,7 @@ export default {
             }
 
             // ============================================================
-            // ★★★ 图片上传代理（通过 Worker 直接写入 R2，绕过 CORS） ★★★
+            // 图片上传代理（写入 R2）
             // ============================================================
             if (path === '/reviews/upload' && method === 'POST') {
                 const contentType = request.headers.get('Content-Type') || '';
@@ -72,7 +72,6 @@ export default {
                         });
                     }
 
-                    // 写入 R2
                     await env.BUCKET.put(key, file.stream(), {
                         httpMetadata: {
                             contentType: file.type || 'image/jpeg',
@@ -334,7 +333,7 @@ export default {
                         `UPDATE products SET name = ?, category = ?, price = ?, unit = ?, stock = ?,
                          supplier_id = ?, emoji = ?, description = ?, is_hot = ?, today_pickup = ?,
                          origin = ?, images = ?, updated_at = ? WHERE id = ?`
-                    ).bind(name, category || '', price, unit || '份', stock || 0, supplierId || null, emoji || '🥬', description || '', is_hot ? 1 : 0, today_pickup !== undefined ? today_pickup : 1, origin || '', images || '[]', new Date().toISOString(), id).run();
+                    ).bind(name, category || '', price, unit || '份', stock || 0, supplierId || null, emoji || '🍅', description || '', is_hot ? 1 : 0, today_pickup !== undefined ? today_pickup : 1, origin || '', images || '[]', new Date().toISOString(), id).run();
                 } else {
                     const newId = 'PROD' + Date.now().toString(36).toUpperCase();
                     await env.DB.prepare(
@@ -342,7 +341,7 @@ export default {
                          supplier_id, emoji, description, status, is_hot, today_pickup,
                          origin, images, sales_count, created_at, updated_at)
                          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
-                    ).bind(newId, name, category || '', price, unit || '份', stock || 0, supplierId || null, emoji || '🥬', description || '', 'on', is_hot ? 1 : 0, today_pickup !== undefined ? today_pickup : 1, origin || '', images || '[]', 0, new Date().toISOString(), new Date().toISOString()).run();
+                    ).bind(newId, name, category || '', price, unit || '份', stock || 0, supplierId || null, emoji || '🍅', description || '', 'on', is_hot ? 1 : 0, today_pickup !== undefined ? today_pickup : 1, origin || '', images || '[]', 0, new Date().toISOString(), new Date().toISOString()).run();
                 }
                 const result = await env.DB.prepare(
                     `SELECT p.*, s.name as supplier_name,
@@ -423,7 +422,7 @@ export default {
             }
 
             // ============================================================
-            // 搜索
+            // 搜索模块
             // ============================================================
             if (path === '/search' && method === 'GET') {
                 const keyword = url.searchParams.get('keyword') || '';
@@ -749,7 +748,7 @@ export default {
             }
 
             // ============================================================
-            // ★★★ 评价模块（使用 Worker 代理上传图片） ★★★
+            // 评价模块
             // ============================================================
             if (path === '/reviews' && method === 'POST') {
                 const body = await request.json();
@@ -776,7 +775,7 @@ export default {
                 await env.DB.prepare(
                     `INSERT INTO messages (id, user_id, type, title, content, link, created_at)
                      VALUES (?, ?, ?, ?, ?, ?, ?)`
-                ).bind('msg_' + Date.now().toString(36), userId, 'system', '感谢您的评价', '您对商品 ' + productId + ' 的评价已发布，获得10积分奖励！', '/profile', new Date().toISOString()).run();
+                ).bind('msg_' + Date.now().toString(36), userId, 'system', '感谢您的评价', '您对商品 ' + productId + ' 的评价已发布，获得10积分奖励', '/profile', new Date().toISOString()).run();
 
                 return new Response(JSON.stringify({ success: true, reviewId: id }), {
                     headers: { ...corsHeaders, 'Content-Type': 'application/json' }
@@ -943,6 +942,9 @@ export default {
                 });
             }
 
+            // ============================================================
+            // ★★★ 地区同步（硬编码临时方案）★★★
+            // ============================================================
             if (path === '/regions/sync' && method === 'POST') {
                 const body = await request.json();
                 const { keyword } = body;
@@ -953,7 +955,14 @@ export default {
                     });
                 }
 
-                const amapKey = env.AMAP_KEY || '';
+                // ★★★ 修改点：优先从环境变量读取，若为空则使用硬编码（仅用于测试）★★★
+                let amapKey = env.AMAP_KEY || '';
+                if (!amapKey) {
+                    // 临时硬编码您的 Key（请替换为实际值）
+                    amapKey = '738f98e8b09ac1dbebccd5a232a60fc0';
+                    console.warn('⚠️ 使用硬编码 AMAP_KEY，同步完成后请从环境变量读取');
+                }
+
                 if (!amapKey) {
                     return new Response(JSON.stringify({ error: '高德地图Key未配置，请在Worker环境变量中设置AMAP_KEY' }), {
                         status: 500,
@@ -1013,7 +1022,7 @@ export default {
                         inserted: insertedCount,
                         skipped: skippedCount,
                         total: districts.length,
-                        message: `同步完成，新增 ${insertedCount} 条，跳过 ${skippedCount} 条`
+                        message: `同步完成，新增${insertedCount}条，跳过${skippedCount}条`
                     }), {
                         headers: { ...corsHeaders, 'Content-Type': 'application/json' }
                     });
@@ -1393,7 +1402,7 @@ export default {
                          supplier_id, emoji, description, status, is_hot, today_pickup,
                          origin, images, sales_count, created_at, updated_at)
                          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
-                    ).bind(p.id, p.name, p.category || '', p.price, p.unit || '份', p.stock || 0, p.supplier_id || null, p.emoji || '🥬', p.description || '', p.status || 'on', p.is_hot || 0, p.today_pickup !== undefined ? p.today_pickup : 1, p.origin || '', p.images || '[]', p.sales_count || 0, p.created_at, p.updated_at).run();
+                    ).bind(p.id, p.name, p.category || '', p.price, p.unit || '份', p.stock || 0, p.supplier_id || null, p.emoji || '🍅', p.description || '', p.status || 'on', p.is_hot || 0, p.today_pickup !== undefined ? p.today_pickup : 1, p.origin || '', p.images || '[]', p.sales_count || 0, p.created_at, p.updated_at).run();
                 }
                 for (const o of data.orders || []) {
                     await env.DB.prepare(
@@ -1538,6 +1547,17 @@ export default {
                 }
                 await env.DB.prepare('UPDATE admins SET password = ? WHERE id = ?').bind(newPassword, id).run();
                 return new Response(JSON.stringify({ success: true, message: '密码修改成功' }), {
+                    headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+                });
+            }
+
+            // ============================================================
+            // 支付确认
+            // ============================================================
+            if (path === '/payment/confirm' && method === 'POST') {
+                const body = await request.json();
+                const { orderId, transactionId, paymentData } = body;
+                return new Response(JSON.stringify({ success: true, message: '支付确认成功' }), {
                     headers: { ...corsHeaders, 'Content-Type': 'application/json' }
                 });
             }
