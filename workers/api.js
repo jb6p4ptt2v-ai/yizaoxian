@@ -1,6 +1,6 @@
 // ============================================================
-// 宜早鲜 Cloudflare Workers API - v6.0 最终修复版
-// 修复：使用 PRAGMA defer_foreign_keys = ON 彻底解决外键约束错误
+// 宜早鲜 Cloudflare Workers API - v6.1 最终事务修复版
+// 修复：在订单插入中使用事务 + PRAGMA defer_foreign_keys = ON
 // ============================================================
 
 export default {
@@ -20,8 +20,8 @@ export default {
         }
 
         try {
-            // ★★★ 核心修复：使用 defer_foreign_keys = ON 延迟外键检查 ★★★
-            // D1 不支持 PRAGMA foreign_keys = OFF，必须使用 defer_foreign_keys
+            // 全局设置延迟外键（对后续所有语句有效，但在事务中才真正延迟）
+            // 我们会在事务中显式再次设置
             await env.DB.exec('PRAGMA defer_foreign_keys = ON;');
 
             // ===== 健康检查 =====
@@ -586,7 +586,7 @@ export default {
             }
 
             // ============================================================
-            // ★★★ 订单模块（已修复：使用 defer_foreign_keys 彻底解决外键问题）★★★
+            // ★★★ 订单模块（使用事务 + defer_foreign_keys）★★★
             // ============================================================
             if (path === '/orders' && method === 'GET') {
                 try {
@@ -608,45 +608,69 @@ export default {
                 const { customerName, customerPhone, address, addressId, items, total, pickupCode, cutoffTime, expectedPickupDate } = body;
                 const orderId = 'ORD' + Date.now().toString(36).toUpperCase();
                 const itemsJson = JSON.stringify(items);
-                // ★★★ 移除 address_id 字段，避免外键约束错误 ★★★
-                await env.DB.prepare(
-                    `INSERT INTO orders (id, customer_name, customer_phone, address,
-                     total, items, status, pickup_code, cutoff_time, expected_pickup_date, created_at, updated_at)
-                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
-                ).bind(orderId, customerName, customerPhone, address, total, itemsJson, 'pending', pickupCode || '', cutoffTime || '', expectedPickupDate || '', new Date().toISOString(), new Date().toISOString()).run();
 
-                await env.DB.prepare(
-                    `INSERT INTO order_logistics (id, order_id, status, updated_at)
-                     VALUES (?, ?, ?, ?)`
-                ).bind('log_' + Date.now().toString(36), orderId, 'pending', new Date().toISOString()).run();
+                try {
+                    // ★★★ 开启事务 ★★★
+                    await env.DB.exec('BEGIN TRANSACTION;');
+                    // ★★★ 在事务中开启延迟外键检查 ★★★
+                    await env.DB.exec('PRAGMA defer_foreign_keys = ON;');
 
-                for (const item of items) {
-                    await env.DB.prepare('UPDATE products SET stock = stock - ?, sales_count = sales_count + ? WHERE id = ?').bind(item.quantity, item.quantity, item.productId).run();
+                    // 插入订单（移除 address_id 字段）
+                    await env.DB.prepare(
+                        `INSERT INTO orders (id, customer_name, customer_phone, address,
+                         total, items, status, pickup_code, cutoff_time, expected_pickup_date, created_at, updated_at)
+                         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+                    ).bind(orderId, customerName, customerPhone, address, total, itemsJson, 'pending', pickupCode || '', cutoffTime || '', expectedPickupDate || '', new Date().toISOString(), new Date().toISOString()).run();
+
+                    // 插入物流记录
+                    await env.DB.prepare(
+                        `INSERT INTO order_logistics (id, order_id, status, updated_at)
+                         VALUES (?, ?, ?, ?)`
+                    ).bind('log_' + Date.now().toString(36), orderId, 'pending', new Date().toISOString()).run();
+
+                    // 扣减库存
+                    for (const item of items) {
+                        await env.DB.prepare('UPDATE products SET stock = stock - ?, sales_count = sales_count + ? WHERE id = ?').bind(item.quantity, item.quantity, item.productId).run();
+                    }
+
+                    // 添加财务记录
+                    await env.DB.prepare(
+                        `INSERT INTO finance_records (id, type, category, amount, description, created_at)
+                         VALUES (?, ?, ?, ?, ?, ?)`
+                    ).bind('FIN' + Date.now().toString(36).toUpperCase(), 'income', '销售收入', total, '订单 ' + orderId, new Date().toISOString()).run();
+
+                    // 发送消息
+                    await env.DB.prepare(
+                        `INSERT INTO messages (id, user_id, type, title, content, link, created_at)
+                         VALUES (?, ?, ?, ?, ?, ?, ?)`
+                    ).bind(
+                        'msg_' + Date.now().toString(36),
+                        customerPhone,
+                        'order',
+                        '订单已提交',
+                        '您的订单 ' + orderId + ' 已提交，提货码：' + (pickupCode || '待生成'),
+                        '/orders',
+                        new Date().toISOString()
+                    ).run();
+
+                    // 提交事务
+                    await env.DB.exec('COMMIT;');
+
+                    // 返回最新订单列表
+                    const result = await env.DB.prepare('SELECT * FROM orders ORDER BY created_at DESC').all();
+                    const orders = result.results.map(o => ({ ...o, items: JSON.parse(o.items || '[]') }));
+                    return new Response(JSON.stringify({ success: true, orderId: orderId, orders: orders }), {
+                        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+                    });
+                } catch (e) {
+                    // 回滚事务
+                    await env.DB.exec('ROLLBACK;');
+                    console.error('订单创建失败:', e);
+                    return new Response(JSON.stringify({ error: '订单创建失败: ' + e.message }), {
+                        status: 500,
+                        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+                    });
                 }
-
-                await env.DB.prepare(
-                    `INSERT INTO finance_records (id, type, category, amount, description, created_at)
-                     VALUES (?, ?, ?, ?, ?, ?)`
-                ).bind('FIN' + Date.now().toString(36).toUpperCase(), 'income', '销售收入', total, '订单 ' + orderId, new Date().toISOString()).run();
-
-                await env.DB.prepare(
-                    `INSERT INTO messages (id, user_id, type, title, content, link, created_at)
-                     VALUES (?, ?, ?, ?, ?, ?, ?)`
-                ).bind(
-                    'msg_' + Date.now().toString(36),
-                    customerPhone,
-                    'order',
-                    '订单已提交',
-                    '您的订单 ' + orderId + ' 已提交，提货码：' + (pickupCode || '待生成'),
-                    '/orders',
-                    new Date().toISOString()
-                ).run();
-
-                const result = await env.DB.prepare('SELECT * FROM orders ORDER BY created_at DESC').all();
-                const orders = result.results.map(o => ({ ...o, items: JSON.parse(o.items || '[]') }));
-                return new Response(JSON.stringify({ success: true, orderId: orderId, orders: orders }), {
-                    headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-                });
             }
 
             if (path === '/orders' && method === 'DELETE') {
