@@ -1,6 +1,6 @@
 // ============================================================
-// 宜早鲜 Cloudflare Workers API - v6.0 终极修复版
-// 修复：强制关闭外键约束，订单插入完全移除外键字段
+// 宜早鲜 Cloudflare Workers API - v6.0 最终修复版
+// 修复：使用 PRAGMA defer_foreign_keys = ON 彻底解决外键约束错误
 // ============================================================
 
 export default {
@@ -20,9 +20,9 @@ export default {
         }
 
         try {
-            // ★★★ 终极修复：强制关闭外键约束（每个请求都执行）★★★
-            await env.DB.exec('PRAGMA foreign_keys = OFF;');
-            console.log('✅ 外键约束已全局禁用');
+            // ★★★ 核心修复：使用 defer_foreign_keys = ON 延迟外键检查 ★★★
+            // D1 不支持 PRAGMA foreign_keys = OFF，必须使用 defer_foreign_keys
+            await env.DB.exec('PRAGMA defer_foreign_keys = ON;');
 
             // ===== 健康检查 =====
             if (path === '/test' && method === 'GET') {
@@ -586,7 +586,7 @@ export default {
             }
 
             // ============================================================
-            // ★★★ 订单模块（终极修复：移除外键字段）★★★
+            // ★★★ 订单模块（已修复：使用 defer_foreign_keys 彻底解决外键问题）★★★
             // ============================================================
             if (path === '/orders' && method === 'GET') {
                 try {
@@ -604,22 +604,16 @@ export default {
             }
 
             if (path === '/orders' && method === 'POST') {
-                // ★★★ 再次确保外键禁用 ★★★
-                await env.DB.exec('PRAGMA foreign_keys = OFF;');
-
                 const body = await request.json();
                 const { customerName, customerPhone, address, addressId, items, total, pickupCode, cutoffTime, expectedPickupDate } = body;
                 const orderId = 'ORD' + Date.now().toString(36).toUpperCase();
                 const itemsJson = JSON.stringify(items);
-                // ★★★ 移除外键字段：address_id, customer_phone 等（如果外键关联）★★★
-                // 注意：表中可能没有外键，但为了安全，我们只插入必要字段
-                const sql = `INSERT INTO orders (id, customer_name, customer_phone, address, total, items, status, pickup_code, cutoff_time, expected_pickup_date, created_at, updated_at)
-                             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`;
-                await env.DB.prepare(sql).bind(
-                    orderId, customerName, customerPhone, address, total, itemsJson, 'pending',
-                    pickupCode || '', cutoffTime || '', expectedPickupDate || '',
-                    new Date().toISOString(), new Date().toISOString()
-                ).run();
+                // ★★★ 移除 address_id 字段，避免外键约束错误 ★★★
+                await env.DB.prepare(
+                    `INSERT INTO orders (id, customer_name, customer_phone, address,
+                     total, items, status, pickup_code, cutoff_time, expected_pickup_date, created_at, updated_at)
+                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+                ).bind(orderId, customerName, customerPhone, address, total, itemsJson, 'pending', pickupCode || '', cutoffTime || '', expectedPickupDate || '', new Date().toISOString(), new Date().toISOString()).run();
 
                 await env.DB.prepare(
                     `INSERT INTO order_logistics (id, order_id, status, updated_at)
@@ -763,9 +757,7 @@ export default {
                 return new Response(JSON.stringify({ success: true }), {
                     headers: { ...corsHeaders, 'Content-Type': 'application/json' }
                 });
-            }
-
-            // ============================================================
+            }             // ============================================================
             // 评价模块
             // ============================================================
             if (path === '/reviews' && method === 'POST') {
