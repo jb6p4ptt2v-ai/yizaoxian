@@ -1,6 +1,6 @@
 /**
  * 定位地址选择助手（拼多多风格 - 底部滑出弹窗）
- * 修复：定位后强制刷新省市下拉框并联动
+ * 修复：定位后强制刷新省市下拉框并联动，增加数据缺失提示
  */
 window.LocationHelper = (function() {
     'use strict';
@@ -395,7 +395,7 @@ window.LocationHelper = (function() {
         _renderListItems(listWrap, filtered);
     }
 
-    // ★★★ 核心修复：选择地址后强制刷新省市下拉框，并确保联动 ★★★
+    // ★★★ 核心修复：选择地址后强制刷新省市下拉框，并检查数据完整性 ★★★
     function _selectAddress(name, fullAddress, province, city, district, street, detail, number) {
         console.log('✅ 用户选择了地址:', name);
         console.log('📍 完整地址:', fullAddress);
@@ -404,7 +404,19 @@ window.LocationHelper = (function() {
         var regionData = _currentRegionData;
         var onAddressPicked = _currentOnAddressPicked;
 
-        // ★★★ 1. 使用 refreshSelects 强制刷新下拉框并联动 ★★★
+        // ★★★ 1. 检查地区数据完整性 ★★★
+        if (regionData) {
+            var cities = regionData.getCities(province);
+            if (!cities || cities.length === 0) {
+                // 城市数据缺失，提示用户同步
+                if (Utils && Utils.toast) {
+                    Utils.toast('⚠️ 地区数据不完整，请先到管理后台同步地区数据');
+                }
+                console.warn('⚠️ 省份 "' + province + '" 的城市数据为空，请同步地区');
+            }
+        }
+
+        // ★★★ 2. 使用 refreshSelects 强制刷新下拉框 ★★★
         if (regionData && typeof regionData.refreshSelects === 'function') {
             try {
                 regionData.refreshSelects(province, city, district);
@@ -421,7 +433,7 @@ window.LocationHelper = (function() {
             }
         }
 
-        // ★★★ 2. 提取详细地址（不含省市区，也不含区县名）★★★
+        // ★★★ 3. 提取详细地址（不含省市区，也不含区县名）★★★
         var sourceAddress = fullAddress || detail || name || '';
 
         var prefixParts = [];
@@ -454,7 +466,7 @@ window.LocationHelper = (function() {
 
         console.log('📝 详细地址（不含省市区）:', cleanedDetail);
 
-        // ★★★ 3. 填充详细地址到输入框 ★★★
+        // ★★★ 4. 填充详细地址到输入框 ★★★
         var addrInput = document.getElementById(addressInputId);
         if (addrInput) {
             addrInput.value = cleanedDetail;
@@ -470,7 +482,7 @@ window.LocationHelper = (function() {
             console.error('❌ 未找到输入框 #' + addressInputId);
         }
 
-        // ★★★ 4. 获取完整地址（省市区 + 详细地址，空格分隔）★★★
+        // ★★★ 5. 获取完整地址（省市区 + 详细地址，空格分隔）★★★
         var fullAddressResult = '';
         var parts2 = [];
         if (province) parts2.push(province);
@@ -481,7 +493,7 @@ window.LocationHelper = (function() {
 
         console.log('📝 完整地址（省市区+详细地址，空格分隔）:', fullAddressResult);
 
-        // ★★★ 5. 执行回调（如果有）★★★
+        // ★★★ 6. 执行回调 ★★★
         if (typeof onAddressPicked === 'function') {
             try {
                 onAddressPicked({
@@ -500,7 +512,7 @@ window.LocationHelper = (function() {
             }
         }
 
-        // ★★★ 6. 关闭弹窗 ★★★
+        // ★★★ 7. 关闭弹窗 ★★★
         var overlay = document.getElementById('pddAddressModal');
         if (overlay) overlay.remove();
 

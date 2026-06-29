@@ -95,7 +95,6 @@ window.RegionData = {
         return this._data[province][city];
     },
 
-    // 渲染下拉框（保留原有方法，供初始化使用）
     renderSelects: function(defaultProvince, defaultCity, defaultDistrict) {
         this.init();
         var provinces = this.getProvinces();
@@ -127,14 +126,14 @@ window.RegionData = {
             '</div>';
     },
 
-    // ★★★ 核心修复：强制刷新下拉框数据并触发联动 ★★★
+    // ★★★ 核心修复：直接填充下拉框，不依赖 change 事件 ★★★
     refreshSelects: function(province, city, district) {
         var pSel = document.getElementById('region_province');
         var cSel = document.getElementById('region_city');
         var dSel = document.getElementById('region_district');
         if (!pSel || !cSel || !dSel) return;
 
-        // 1. 重新填充省份列表
+        // 1. 填充省份
         var provinces = this.getProvinces();
         pSel.innerHTML = '<option value="">请选择省份</option>';
         provinces.forEach(function(p) {
@@ -142,35 +141,36 @@ window.RegionData = {
             pSel.innerHTML += '<option value="' + p + '" ' + selected + '>' + p + '</option>';
         });
 
-        // 2. 触发省份 change 事件以加载城市
-        var evt = document.createEvent('HTMLEvents');
-        evt.initEvent('change', false, true);
-        pSel.dispatchEvent(evt);
-
-        // 3. 如果提供了城市，则填充城市并选中
-        if (city) {
-            // 获取该省份下的城市列表（此时 cSel 已被 onchange 填充）
-            // 但为了确保，我们手动填充城市列表
+        // 2. 如果有省份，填充城市
+        if (province) {
             var cities = this.getCities(province);
             cSel.innerHTML = '<option value="">请选择城市</option>';
             cities.forEach(function(c) {
                 var selected = (c === city) ? 'selected' : '';
                 cSel.innerHTML += '<option value="' + c + '" ' + selected + '>' + c + '</option>';
             });
-            // 触发城市 change 事件
-            var evt2 = document.createEvent('HTMLEvents');
-            evt2.initEvent('change', false, true);
-            cSel.dispatchEvent(evt2);
+            // 3. 如果有城市，填充区县
+            if (city) {
+                var districts = this.getDistricts(province, city);
+                dSel.innerHTML = '<option value="">请选择区县</option>';
+                districts.forEach(function(d) {
+                    var selected = (d === district) ? 'selected' : '';
+                    dSel.innerHTML += '<option value="' + d + '" ' + selected + '>' + d + '</option>';
+                });
+            } else {
+                dSel.innerHTML = '<option value="">请选择区县</option>';
+            }
+        } else {
+            cSel.innerHTML = '<option value="">请选择城市</option>';
+            dSel.innerHTML = '<option value="">请选择区县</option>';
         }
 
-        // 4. 如果提供了区县，则填充并选中
-        if (district) {
-            var districts = this.getDistricts(province, city);
-            dSel.innerHTML = '<option value="">请选择区县</option>';
-            districts.forEach(function(d) {
-                var selected = (d === district) ? 'selected' : '';
-                dSel.innerHTML += '<option value="' + d + '" ' + selected + '>' + d + '</option>';
-            });
+        // 触发已绑定的 change 事件（用于其他联动逻辑）
+        if (pSel.onchange && typeof pSel.onchange === 'function') {
+            pSel.onchange();
+        }
+        if (cSel.onchange && typeof cSel.onchange === 'function') {
+            cSel.onchange();
         }
     },
 
@@ -180,7 +180,6 @@ window.RegionData = {
         var dSel = document.getElementById('region_district');
         if (!pSel || !cSel || !dSel) return;
 
-        // 移除旧事件避免重复绑定（使用新事件）
         pSel.onchange = function() {
             var province = this.value;
             var cities = window.RegionData.getCities(province);
@@ -201,7 +200,6 @@ window.RegionData = {
             });
         };
 
-        // 如果已经预选了省份，触发加载
         if (pSel.value) {
             pSel.onchange();
             if (cSel.value) {
@@ -224,7 +222,6 @@ window.RegionData = {
     },
 
     setSelected: function(province, city, district) {
-        // 此方法保留用于简单设置，但推荐使用 refreshSelects
         var pSel = document.getElementById('region_province');
         var cSel = document.getElementById('region_city');
         var dSel = document.getElementById('region_district');
