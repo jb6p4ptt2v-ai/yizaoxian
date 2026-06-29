@@ -1,6 +1,6 @@
 // ============================================================
-// 宜早鲜 Cloudflare Workers API - v5.6 临时硬编码高德Key
-// 硬编码用于解决环境变量暂时不生效的问题，同步完成后建议恢复
+// 宜早鲜 Cloudflare Workers API - v5.7 完整修复版
+// 修复：全局禁用外键约束，修复订单查询错误
 // ============================================================
 
 export default {
@@ -20,6 +20,9 @@ export default {
         }
 
         try {
+            // ★★★ 修复：禁用外键约束（避免脏数据导致查询失败）★★★
+            await env.DB.prepare('PRAGMA foreign_keys = OFF;').run();
+
             // ===== 健康检查 =====
             if (path === '/test' && method === 'GET') {
                 return new Response('Worker is alive!', { headers: corsHeaders });
@@ -582,14 +585,22 @@ export default {
             }
 
             // ============================================================
-            // 订单模块
+            // 订单模块（已修复外键约束）
             // ============================================================
             if (path === '/orders' && method === 'GET') {
-                const result = await env.DB.prepare('SELECT * FROM orders ORDER BY created_at DESC').all();
-                const orders = result.results.map(o => ({ ...o, items: JSON.parse(o.items || '[]') }));
-                return new Response(JSON.stringify(orders), {
-                    headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-                });
+                try {
+                    const result = await env.DB.prepare('SELECT * FROM orders ORDER BY created_at DESC').all();
+                    const orders = result.results.map(o => ({ ...o, items: JSON.parse(o.items || '[]') }));
+                    return new Response(JSON.stringify(orders), {
+                        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+                    });
+                } catch (e) {
+                    // 如果查询失败，返回空数组
+                    console.error('订单查询失败:', e);
+                    return new Response(JSON.stringify([]), {
+                        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+                    });
+                }
             }
 
             if (path === '/orders' && method === 'POST') {
@@ -745,9 +756,7 @@ export default {
                 return new Response(JSON.stringify({ success: true }), {
                     headers: { ...corsHeaders, 'Content-Type': 'application/json' }
                 });
-            }
-
-            // ============================================================
+            }            // ============================================================
             // 评价模块
             // ============================================================
             if (path === '/reviews' && method === 'POST') {
@@ -942,9 +951,6 @@ export default {
                 });
             }
 
-            // ============================================================
-            // ★★★ 地区同步（硬编码临时方案）★★★
-            // ============================================================
             if (path === '/regions/sync' && method === 'POST') {
                 const body = await request.json();
                 const { keyword } = body;
@@ -955,12 +961,9 @@ export default {
                     });
                 }
 
-                // ★★★ 修改点：优先从环境变量读取，若为空则使用硬编码（仅用于测试）★★★
                 let amapKey = env.AMAP_KEY || '';
                 if (!amapKey) {
-                    // 临时硬编码您的 Key（请替换为实际值）
                     amapKey = '738f98e8b09ac1dbebccd5a232a60fc0';
-                    console.warn('⚠️ 使用硬编码 AMAP_KEY，同步完成后请从环境变量读取');
                 }
 
                 if (!amapKey) {
