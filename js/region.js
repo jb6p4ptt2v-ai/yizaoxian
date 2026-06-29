@@ -95,6 +95,7 @@ window.RegionData = {
         return this._data[province][city];
     },
 
+    // 渲染下拉框（保留原有方法，供初始化使用）
     renderSelects: function(defaultProvince, defaultCity, defaultDistrict) {
         this.init();
         var provinces = this.getProvinces();
@@ -126,44 +127,50 @@ window.RegionData = {
             '</div>';
     },
 
-    // ★★★ 新增：强制刷新下拉框数据（用于定位后填充）★★★
+    // ★★★ 核心修复：强制刷新下拉框数据并触发联动 ★★★
     refreshSelects: function(province, city, district) {
         var pSel = document.getElementById('region_province');
         var cSel = document.getElementById('region_city');
         var dSel = document.getElementById('region_district');
         if (!pSel || !cSel || !dSel) return;
 
-        // 重新填充省份列表
+        // 1. 重新填充省份列表
         var provinces = this.getProvinces();
-        pSel.innerHTML = '<option value="">请选择省份</option>' +
-            provinces.map(function(p) {
-                return '<option value="' + p + '" ' + (p === province ? 'selected' : '') + '>' + p + '</option>';
-            }).join('');
+        pSel.innerHTML = '<option value="">请选择省份</option>';
+        provinces.forEach(function(p) {
+            var selected = (p === province) ? 'selected' : '';
+            pSel.innerHTML += '<option value="' + p + '" ' + selected + '>' + p + '</option>';
+        });
 
-        // 触发 change 加载城市
-        if (province) {
-            // 手动触发 onchange
-            if (typeof pSel.onchange === 'function') {
-                pSel.onchange();
-            }
-            // 但 onchange 会使用当前 province 值，然后加载城市，我们再设置 city
+        // 2. 触发省份 change 事件以加载城市
+        var evt = document.createEvent('HTMLEvents');
+        evt.initEvent('change', false, true);
+        pSel.dispatchEvent(evt);
+
+        // 3. 如果提供了城市，则填充城市并选中
+        if (city) {
+            // 获取该省份下的城市列表（此时 cSel 已被 onchange 填充）
+            // 但为了确保，我们手动填充城市列表
             var cities = this.getCities(province);
-            cSel.innerHTML = '<option value="">请选择城市</option>' +
-                cities.map(function(c) {
-                    return '<option value="' + c + '" ' + (c === city ? 'selected' : '') + '>' + c + '</option>';
-                }).join('');
+            cSel.innerHTML = '<option value="">请选择城市</option>';
+            cities.forEach(function(c) {
+                var selected = (c === city) ? 'selected' : '';
+                cSel.innerHTML += '<option value="' + c + '" ' + selected + '>' + c + '</option>';
+            });
+            // 触发城市 change 事件
+            var evt2 = document.createEvent('HTMLEvents');
+            evt2.initEvent('change', false, true);
+            cSel.dispatchEvent(evt2);
+        }
 
-            // 触发城市 change 加载区县
-            if (city) {
-                if (typeof cSel.onchange === 'function') {
-                    cSel.onchange();
-                }
-                var districts = this.getDistricts(province, city);
-                dSel.innerHTML = '<option value="">请选择区县</option>' +
-                    districts.map(function(d) {
-                        return '<option value="' + d + '" ' + (d === district ? 'selected' : '') + '>' + d + '</option>';
-                    }).join('');
-            }
+        // 4. 如果提供了区县，则填充并选中
+        if (district) {
+            var districts = this.getDistricts(province, city);
+            dSel.innerHTML = '<option value="">请选择区县</option>';
+            districts.forEach(function(d) {
+                var selected = (d === district) ? 'selected' : '';
+                dSel.innerHTML += '<option value="' + d + '" ' + selected + '>' + d + '</option>';
+            });
         }
     },
 
@@ -173,11 +180,14 @@ window.RegionData = {
         var dSel = document.getElementById('region_district');
         if (!pSel || !cSel || !dSel) return;
 
+        // 移除旧事件避免重复绑定（使用新事件）
         pSel.onchange = function() {
             var province = this.value;
             var cities = window.RegionData.getCities(province);
-            cSel.innerHTML = '<option value="">请选择城市</option>' +
-                cities.map(function(c) { return '<option value="' + c + '">' + c + '</option>'; }).join('');
+            cSel.innerHTML = '<option value="">请选择城市</option>';
+            cities.forEach(function(c) {
+                cSel.innerHTML += '<option value="' + c + '">' + c + '</option>';
+            });
             dSel.innerHTML = '<option value="">请选择区县</option>';
         };
 
@@ -185,18 +195,18 @@ window.RegionData = {
             var province = pSel.value;
             var city = this.value;
             var districts = window.RegionData.getDistricts(province, city);
-            dSel.innerHTML = '<option value="">请选择区县</option>' +
-                districts.map(function(d) { return '<option value="' + d + '">' + d + '</option>'; }).join('');
+            dSel.innerHTML = '<option value="">请选择区县</option>';
+            districts.forEach(function(d) {
+                dSel.innerHTML += '<option value="' + d + '">' + d + '</option>';
+            });
         };
 
-        // 如果已预选省份，触发加载
+        // 如果已经预选了省份，触发加载
         if (pSel.value) {
             pSel.onchange();
-            setTimeout(function() {
-                if (cSel.value) {
-                    cSel.onchange();
-                }
-            }, 50);
+            if (cSel.value) {
+                cSel.onchange();
+            }
         }
     },
 
@@ -214,6 +224,7 @@ window.RegionData = {
     },
 
     setSelected: function(province, city, district) {
+        // 此方法保留用于简单设置，但推荐使用 refreshSelects
         var pSel = document.getElementById('region_province');
         var cSel = document.getElementById('region_city');
         var dSel = document.getElementById('region_district');

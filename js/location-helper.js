@@ -1,6 +1,6 @@
 /**
  * 定位地址选择助手（拼多多风格 - 底部滑出弹窗）
- * 修复：定位后自动填充省市区下拉框并刷新联动，提高定位精度
+ * 修复：定位后强制刷新省市下拉框并联动
  */
 window.LocationHelper = (function() {
     'use strict';
@@ -50,7 +50,6 @@ window.LocationHelper = (function() {
             return;
         }
 
-        // 使用高精度定位，超时15秒
         MapService.locateCurrentPosition(function(result) {
             console.log('📍 定位回调:', result);
             if (!result || !result.success || !result.data) {
@@ -396,6 +395,7 @@ window.LocationHelper = (function() {
         _renderListItems(listWrap, filtered);
     }
 
+    // ★★★ 核心修复：选择地址后强制刷新省市下拉框，并确保联动 ★★★
     function _selectAddress(name, fullAddress, province, city, district, street, detail, number) {
         console.log('✅ 用户选择了地址:', name);
         console.log('📍 完整地址:', fullAddress);
@@ -404,10 +404,11 @@ window.LocationHelper = (function() {
         var regionData = _currentRegionData;
         var onAddressPicked = _currentOnAddressPicked;
 
-        // ★★★ 1. 填充省市联动（使用 refreshSelects 彻底刷新）★★★
+        // ★★★ 1. 使用 refreshSelects 强制刷新下拉框并联动 ★★★
         if (regionData && typeof regionData.refreshSelects === 'function') {
             try {
                 regionData.refreshSelects(province, city, district);
+                console.log('✅ 下拉框已刷新，省:', province, '市:', city, '区:', district);
             } catch(e) {
                 console.warn('regionData.refreshSelects 调用失败:', e);
             }
@@ -469,7 +470,7 @@ window.LocationHelper = (function() {
             console.error('❌ 未找到输入框 #' + addressInputId);
         }
 
-        // ★★★ 4. 获取完整地址（省市区 + 详细地址，中间加空格）★★★
+        // ★★★ 4. 获取完整地址（省市区 + 详细地址，空格分隔）★★★
         var fullAddressResult = '';
         var parts2 = [];
         if (province) parts2.push(province);
@@ -480,7 +481,7 @@ window.LocationHelper = (function() {
 
         console.log('📝 完整地址（省市区+详细地址，空格分隔）:', fullAddressResult);
 
-        // ★★★ 5. 执行回调 ★★★
+        // ★★★ 5. 执行回调（如果有）★★★
         if (typeof onAddressPicked === 'function') {
             try {
                 onAddressPicked({
