@@ -1,6 +1,6 @@
 // ============================================================
-// 宜早鲜 Cloudflare Workers API - v5.7 完整修复版
-// 修复：全局禁用外键约束，修复订单查询错误
+// 宜早鲜 Cloudflare Workers API - v5.8 完整修复版
+// 修复：订单插入时移除 address_id 字段，彻底避免外键约束错误
 // ============================================================
 
 export default {
@@ -20,7 +20,7 @@ export default {
         }
 
         try {
-            // ★★★ 修复：禁用外键约束（避免脏数据导致查询失败）★★★
+            // ★★★ 全局禁用外键约束（防止其他查询报错）★★★
             await env.DB.prepare('PRAGMA foreign_keys = OFF;').run();
 
             // ===== 健康检查 =====
@@ -585,7 +585,7 @@ export default {
             }
 
             // ============================================================
-            // 订单模块（已修复外键约束）
+            // ★★★ 订单模块（已修复外键约束：移除 address_id 字段）★★★
             // ============================================================
             if (path === '/orders' && method === 'GET') {
                 try {
@@ -595,7 +595,6 @@ export default {
                         headers: { ...corsHeaders, 'Content-Type': 'application/json' }
                     });
                 } catch (e) {
-                    // 如果查询失败，返回空数组
                     console.error('订单查询失败:', e);
                     return new Response(JSON.stringify([]), {
                         headers: { ...corsHeaders, 'Content-Type': 'application/json' }
@@ -608,11 +607,12 @@ export default {
                 const { customerName, customerPhone, address, addressId, items, total, pickupCode, cutoffTime, expectedPickupDate } = body;
                 const orderId = 'ORD' + Date.now().toString(36).toUpperCase();
                 const itemsJson = JSON.stringify(items);
+                // ★★★ 移除 address_id 字段，避免外键约束错误 ★★★
                 await env.DB.prepare(
-                    `INSERT INTO orders (id, customer_name, customer_phone, address, address_id,
+                    `INSERT INTO orders (id, customer_name, customer_phone, address,
                      total, items, status, pickup_code, cutoff_time, expected_pickup_date, created_at, updated_at)
-                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
-                ).bind(orderId, customerName, customerPhone, address, addressId || null, total, itemsJson, 'pending', pickupCode || '', cutoffTime || '', expectedPickupDate || '', new Date().toISOString(), new Date().toISOString()).run();
+                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+                ).bind(orderId, customerName, customerPhone, address, total, itemsJson, 'pending', pickupCode || '', cutoffTime || '', expectedPickupDate || '', new Date().toISOString(), new Date().toISOString()).run();
 
                 await env.DB.prepare(
                     `INSERT INTO order_logistics (id, order_id, status, updated_at)
@@ -756,7 +756,8 @@ export default {
                 return new Response(JSON.stringify({ success: true }), {
                     headers: { ...corsHeaders, 'Content-Type': 'application/json' }
                 });
-            }            // ============================================================
+            }
+            // ============================================================
             // 评价模块
             // ============================================================
             if (path === '/reviews' && method === 'POST') {
@@ -1409,10 +1410,10 @@ export default {
                 }
                 for (const o of data.orders || []) {
                     await env.DB.prepare(
-                        `INSERT INTO orders (id, customer_name, customer_phone, address, address_id,
+                        `INSERT INTO orders (id, customer_name, customer_phone, address,
                          total, items, status, pickup_code, cutoff_time, expected_pickup_date, created_at, updated_at)
-                         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
-                    ).bind(o.id, o.customer_name, o.customer_phone, o.address, o.address_id || null, o.total, o.items, o.status || 'pending', o.pickup_code || '', o.cutoff_time || '', o.expected_pickup_date || '', o.created_at, o.updated_at).run();
+                         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+                    ).bind(o.id, o.customer_name, o.customer_phone, o.address, o.total, o.items, o.status || 'pending', o.pickup_code || '', o.cutoff_time || '', o.expected_pickup_date || '', o.created_at, o.updated_at).run();
                 }
                 for (const a of data.addresses || []) {
                     await env.DB.prepare(
