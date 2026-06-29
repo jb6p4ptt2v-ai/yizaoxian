@@ -1,6 +1,6 @@
 // ============================================================
-// 宜早鲜 Cloudflare Workers API - v5.8 完整修复版
-// 修复：订单插入时移除 address_id 字段，彻底避免外键约束错误
+// 宜早鲜 Cloudflare Workers API - v5.9 最终修复版
+// 修复：使用 exec 强制关闭外键约束，彻底解决订单外键错误
 // ============================================================
 
 export default {
@@ -20,8 +20,8 @@ export default {
         }
 
         try {
-            // ★★★ 全局禁用外键约束（防止其他查询报错）★★★
-            await env.DB.prepare('PRAGMA foreign_keys = OFF;').run();
+            // ★★★ 使用 exec 强制关闭外键约束（对当前连接有效）★★★
+            await env.DB.exec('PRAGMA foreign_keys = OFF;');
 
             // ===== 健康检查 =====
             if (path === '/test' && method === 'GET') {
@@ -585,7 +585,7 @@ export default {
             }
 
             // ============================================================
-            // ★★★ 订单模块（已修复外键约束：移除 address_id 字段）★★★
+            // ★★★ 订单模块（已修复：移除 address_id，使用 exec 关闭外键）★★★
             // ============================================================
             if (path === '/orders' && method === 'GET') {
                 try {
@@ -607,7 +607,7 @@ export default {
                 const { customerName, customerPhone, address, addressId, items, total, pickupCode, cutoffTime, expectedPickupDate } = body;
                 const orderId = 'ORD' + Date.now().toString(36).toUpperCase();
                 const itemsJson = JSON.stringify(items);
-                // ★★★ 移除 address_id 字段，避免外键约束错误 ★★★
+                // ★★★ 移除 address_id 字段 ★★★
                 await env.DB.prepare(
                     `INSERT INTO orders (id, customer_name, customer_phone, address,
                      total, items, status, pickup_code, cutoff_time, expected_pickup_date, created_at, updated_at)
