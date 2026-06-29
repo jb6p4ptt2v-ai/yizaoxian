@@ -2,18 +2,28 @@ window.Auth = {
     // ===== 管理员登录 =====
     getCurrentAdmin: function() {
         try {
-            var raw = sessionStorage.getItem('yizaoxian_admin_session');
+            var raw = localStorage.getItem('yizaoxian_admin_session');
             if (!raw) return null;
-            return JSON.parse(raw);
+            var data = JSON.parse(raw);
+            // 检查是否过期（7天）
+            if (data.expiresAt && Date.now() > data.expiresAt) {
+                localStorage.removeItem('yizaoxian_admin_session');
+                return null;
+            }
+            return data.user || null;
         } catch(e) { return null; }
     },
 
     setCurrentAdmin: function(admin) {
-        sessionStorage.setItem('yizaoxian_admin_session', JSON.stringify(admin));
+        var data = {
+            user: admin,
+            expiresAt: Date.now() + 7 * 24 * 60 * 60 * 1000 // 7天
+        };
+        localStorage.setItem('yizaoxian_admin_session', JSON.stringify(data));
     },
 
     logoutAdmin: function() {
-        sessionStorage.removeItem('yizaoxian_admin_session');
+        localStorage.removeItem('yizaoxian_admin_session');
         window.location.href = 'admin.html';
     },
 
@@ -49,15 +59,23 @@ window.Auth = {
     // ===== 前台用户登录 =====
     getCurrentUser: function() {
         try {
-            var raw = sessionStorage.getItem('yizaoxian_session');
+            var raw = localStorage.getItem('yizaoxian_session');
             if (!raw) return null;
             var data = JSON.parse(raw);
+            if (data.expiresAt && Date.now() > data.expiresAt) {
+                localStorage.removeItem('yizaoxian_session');
+                return null;
+            }
             return data.user || null;
         } catch(e) { return null; }
     },
 
     setCurrentUser: function(user) {
-        sessionStorage.setItem('yizaoxian_session', JSON.stringify({ user: user }));
+        var data = {
+            user: user,
+            expiresAt: Date.now() + 7 * 24 * 60 * 60 * 1000 // 7天
+        };
+        localStorage.setItem('yizaoxian_session', JSON.stringify(data));
     },
 
     showPage: function(page) {
@@ -103,7 +121,6 @@ window.Auth = {
                         window.location.href = 'admin.html';
                     } else {
                         window.location.reload();
-                        // 登录后刷新消息未读
                         setTimeout(function() {
                             if (window.ClientApp && window.ClientApp.updateMessageBadge) {
                                 window.ClientApp.updateMessageBadge();
@@ -298,7 +315,7 @@ window.Auth = {
     },
 
     logout: function() {
-        sessionStorage.removeItem('yizaoxian_session');
+        localStorage.removeItem('yizaoxian_session');
         window.location.href = 'index.html';
     }
 };

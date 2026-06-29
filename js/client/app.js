@@ -183,11 +183,19 @@ document.addEventListener('DOMContentLoaded', function() {
                 if (typeof cb === 'function') cb();
             }, 500);
         }
-        // 登录后刷新消息未读
         setTimeout(function() {
             if (ClientApp && ClientApp.updateMessageBadge) {
                 ClientApp.updateMessageBadge();
             }
         }, 600);
     };
+
+    // ★★★ 页面加载时自动检查 localStorage 中的登录信息 ★★★
+    var user = Auth.getCurrentUser();
+    if (user) {
+        // 自动登录
+        ClientApp.init(user);
+    } else {
+        ClientApp.init(null);
+    }
 });
